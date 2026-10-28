@@ -34,7 +34,7 @@ class AdminApplication : Application() {
         pairedCctvDeviceId = prefs.getString("paired_cctv_id", null)
         sharedSecret = prefs.getString("shared_secret", null)
 
-        val savedServerUrl = prefs.getString("backend_url", "http://10.0.2.2:10000") ?: "http://10.0.2.2:10000"
+        val savedServerUrl = prefs.getString("backend_url", "https://timer-hutq.onrender.com") ?: "https://timer-hutq.onrender.com"
         apiClient = TimerApiClient(savedServerUrl)
     }
 

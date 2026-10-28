@@ -16,7 +16,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class AdminUiState(
-    val serverUrl: String = "http://10.0.2.2:10000",
+    val serverUrl: String = "https://timer-hutq.onrender.com",
     val isPaired: Boolean = false,
     val pairedCctvId: String? = null,
     val statusCategory: DeviceStatusCategory = DeviceStatusCategory.OFFLINE,

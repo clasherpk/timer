@@ -41,7 +41,7 @@ fun CctvSettingsSheet(
 
     var serverUrl by remember {
         val prefs = context.getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
-        mutableStateOf(prefs.getString("backend_url", "http://10.0.2.2:10000") ?: "http://10.0.2.2:10000")
+        mutableStateOf(prefs.getString("backend_url", "https://timer-hutq.onrender.com") ?: "https://timer-hutq.onrender.com")
     }
 
     var pairingCode by remember { mutableStateOf<String?>(null) }

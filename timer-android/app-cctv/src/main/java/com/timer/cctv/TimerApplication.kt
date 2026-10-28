@@ -29,7 +29,7 @@ class TimerApplication : Application() {
         }
         deviceId = id
 
-        val savedServerUrl = prefs.getString("backend_url", "http://10.0.2.2:10000") ?: "http://10.0.2.2:10000"
+        val savedServerUrl = prefs.getString("backend_url", "https://timer-hutq.onrender.com") ?: "https://timer-hutq.onrender.com"
         apiClient = TimerApiClient(savedServerUrl)
 
         createNotificationChannels()

@@ -18,7 +18,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 class TimerApiClient(
-    private var baseUrl: String = "http://10.0.2.2:10000" // Default for Android Emulator to localhost
+    private var baseUrl: String = "https://timer-hutq.onrender.com"
 ) {
     val json = Json {
         ignoreUnknownKeys = true
