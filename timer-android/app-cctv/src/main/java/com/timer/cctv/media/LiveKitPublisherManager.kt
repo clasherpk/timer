@@ -11,6 +11,7 @@ import io.livekit.android.room.track.Track
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runBlocking
 
 class LiveKitPublisherManager(private val context: Context) {
 
@@ -69,7 +70,8 @@ class LiveKitPublisherManager(private val context: Context) {
     suspend fun switchCamera(): CameraFacing {
         val room = currentRoom ?: return _currentFacing.value
         try {
-            val videoTrack = room.localParticipant.getTrack(Track.Source.CAMERA)?.track as? LocalVideoTrack
+            val publication = room.localParticipant.getTrackPublication(Track.Source.CAMERA)
+            val videoTrack = publication?.track as? LocalVideoTrack
             videoTrack?.switchCamera()
             val nextFacing = if (_currentFacing.value == CameraFacing.BACK) CameraFacing.FRONT else CameraFacing.BACK
             _currentFacing.value = nextFacing
@@ -82,8 +84,14 @@ class LiveKitPublisherManager(private val context: Context) {
     fun stopSession() {
         try {
             currentRoom?.let { room ->
-                room.localParticipant.setCameraEnabled(false)
-                room.localParticipant.setMicrophoneEnabled(false)
+                runBlocking {
+                    try {
+                        room.localParticipant.setCameraEnabled(false)
+                        room.localParticipant.setMicrophoneEnabled(false)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
                 room.disconnect()
                 room.release()
             }
