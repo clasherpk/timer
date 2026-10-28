@@ -114,6 +114,7 @@ fun DashboardScreen(
                         mode = uiState.activeSessionMode,
                         videoTrack = videoTrack,
                         isAudioActive = isAudioActive,
+                        onInitRenderer = { renderer -> viewModel.subscriberManager.initRenderer(renderer) },
                         onSwitchCamera = { viewModel.switchCamera() },
                         onStopSession = { viewModel.stopSession() }
                     )
@@ -330,6 +331,7 @@ fun ActiveLiveSessionCard(
     mode: SessionMode,
     videoTrack: io.livekit.android.room.track.RemoteVideoTrack?,
     isAudioActive: Boolean,
+    onInitRenderer: (SurfaceViewRenderer) -> Unit,
     onSwitchCamera: () -> Unit,
     onStopSession: () -> Unit
 ) {
@@ -369,8 +371,8 @@ fun ActiveLiveSessionCard(
                         AndroidView(
                             factory = { context ->
                                 SurfaceViewRenderer(context).apply {
-                                    viewModel.subscriberManager.initRenderer(this)
-                                    videoTrack?.addRenderer(this)
+                                    onInitRenderer(this)
+                                    videoTrack.addRenderer(this)
                                 }
                             },
                             modifier = Modifier.fillMaxSize()

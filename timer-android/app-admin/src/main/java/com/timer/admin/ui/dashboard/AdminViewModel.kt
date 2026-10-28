@@ -60,12 +60,14 @@ class AdminViewModel : ViewModel() {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = app.apiClient.submitPairing(app.deviceId, code)
             result.onSuccess { res ->
-                if (res.success && res.cctvDeviceId != null && res.sharedSecret != null) {
-                    app.savePairing(res.cctvDeviceId, res.sharedSecret)
+                val cctvId = res.cctvDeviceId
+                val secret = res.sharedSecret
+                if (res.success && cctvId != null && secret != null) {
+                    app.savePairing(cctvId, secret)
                     _uiState.update {
                         it.copy(
                             isPaired = true,
-                            pairedCctvId = res.cctvDeviceId,
+                            pairedCctvId = cctvId,
                             isLoading = false
                         )
                     }
