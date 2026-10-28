@@ -17,14 +17,7 @@ const port = Number(process.env.PORT) || 10000;
 const host = process.env.HOST || '0.0.0.0';
 
 const fastify = Fastify({
-  logger: {
-    transport: {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-      },
-    },
-  },
+  logger: true,
 });
 
 await fastify.register(cors, {
