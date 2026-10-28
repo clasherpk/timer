@@ -6,9 +6,8 @@ import com.timer.core.model.LiveKitSessionGrant
 import com.timer.core.model.SessionMode
 import io.livekit.android.LiveKit
 import io.livekit.android.room.Room
-import io.livekit.android.room.track.LocalAudioTrack
 import io.livekit.android.room.track.LocalVideoTrack
-import io.livekit.android.room.track.CameraPosition
+import io.livekit.android.room.track.Track
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,8 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 class LiveKitPublisherManager(private val context: Context) {
 
     private var currentRoom: Room? = null
-    private var localVideoTrack: LocalVideoTrack? = null
-    private var localAudioTrack: LocalAudioTrack? = null
 
     private val _isCameraActive = MutableStateFlow(false)
     val isCameraActive: StateFlow<Boolean> = _isCameraActive.asStateFlow()
@@ -35,24 +32,27 @@ class LiveKitPublisherManager(private val context: Context) {
         stopSession()
 
         return try {
-            val room = LiveKit.connect(
-                appContext = context,
-                url = grant.serverUrl,
-                token = grant.token
-            )
+            val room = LiveKit.create(appContext = context)
+            room.connect(grant.serverUrl, grant.token)
             currentRoom = room
             _sessionMode.value = grant.mode
 
             when (grant.mode) {
                 SessionMode.CAMERA_ONLY -> {
-                    enableVideo(room, CameraPosition.BACK)
+                    room.localParticipant.setCameraEnabled(true)
+                    _isCameraActive.value = true
+                    _isMicActive.value = false
                 }
                 SessionMode.AUDIO_ONLY -> {
-                    enableAudio(room)
+                    room.localParticipant.setMicrophoneEnabled(true)
+                    _isCameraActive.value = false
+                    _isMicActive.value = true
                 }
                 SessionMode.CAMERA_AND_AUDIO -> {
-                    enableVideo(room, CameraPosition.BACK)
-                    enableAudio(room)
+                    room.localParticipant.setCameraEnabled(true)
+                    room.localParticipant.setMicrophoneEnabled(true)
+                    _isCameraActive.value = true
+                    _isMicActive.value = true
                 }
                 SessionMode.IDLE -> {
                     stopSession()
@@ -66,51 +66,27 @@ class LiveKitPublisherManager(private val context: Context) {
         }
     }
 
-    private suspend fun enableVideo(room: Room, position: CameraPosition) {
-        val videoTrack = room.localParticipant.createVideoTrack(
-            options = LocalVideoTrackOptions(position = position)
-        )
-        room.localParticipant.publishVideoTrack(videoTrack)
-        localVideoTrack = videoTrack
-        _isCameraActive.value = true
-        _currentFacing.value = if (position == CameraPosition.FRONT) CameraFacing.FRONT else CameraFacing.BACK
-    }
-
-    private suspend fun enableAudio(room: Room) {
-        val audioTrack = room.localParticipant.createAudioTrack()
-        room.localParticipant.publishAudioTrack(audioTrack)
-        localAudioTrack = audioTrack
-        _isMicActive.value = true
-    }
-
     suspend fun switchCamera(): CameraFacing {
-        val videoTrack = localVideoTrack ?: return _currentFacing.value
-        val newPosition = if (_currentFacing.value == CameraFacing.BACK) {
-            CameraPosition.FRONT
-        } else {
-            CameraPosition.BACK
-        }
-
+        val room = currentRoom ?: return _currentFacing.value
         try {
-            videoTrack.switchCamera(newPosition)
-            _currentFacing.value = if (newPosition == CameraPosition.FRONT) CameraFacing.FRONT else CameraFacing.BACK
+            val videoTrack = room.localParticipant.getTrack(Track.Source.CAMERA)?.track as? LocalVideoTrack
+            videoTrack?.switchCamera()
+            val nextFacing = if (_currentFacing.value == CameraFacing.BACK) CameraFacing.FRONT else CameraFacing.BACK
+            _currentFacing.value = nextFacing
         } catch (e: Exception) {
             e.printStackTrace()
         }
-
         return _currentFacing.value
     }
 
     fun stopSession() {
         try {
-            localVideoTrack?.stop()
-            localAudioTrack?.stop()
-
-            localVideoTrack = null
-            localAudioTrack = null
-
-            currentRoom?.disconnect()
-            currentRoom?.release()
+            currentRoom?.let { room ->
+                room.localParticipant.setCameraEnabled(false)
+                room.localParticipant.setMicrophoneEnabled(false)
+                room.disconnect()
+                room.release()
+            }
             currentRoom = null
         } catch (e: Exception) {
             e.printStackTrace()

@@ -369,7 +369,8 @@ fun ActiveLiveSessionCard(
                         AndroidView(
                             factory = { context ->
                                 SurfaceViewRenderer(context).apply {
-                                    videoTrack.addRenderer(this)
+                                    viewModel.subscriberManager.initRenderer(this)
+                                    videoTrack?.addRenderer(this)
                                 }
                             },
                             modifier = Modifier.fillMaxSize()

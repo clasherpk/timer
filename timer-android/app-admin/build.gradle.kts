@@ -73,6 +73,11 @@ dependencies {
     // LiveKit
     implementation(libs.livekit.android)
 
+    // Ktor & Network
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.websockets)
+    implementation(libs.ktor.client.okhttp)
+
     // Coroutines & Serialization
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)

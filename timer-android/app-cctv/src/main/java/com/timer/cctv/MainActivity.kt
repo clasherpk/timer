@@ -24,6 +24,7 @@ import com.timer.cctv.ui.cctv.CctvSettingsSheet
 import com.timer.cctv.ui.timer.TimerScreen
 import com.timer.cctv.ui.timer.TimerViewModel
 import com.timer.core.model.SessionMode
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
 
@@ -60,11 +61,14 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
                 var showSettingsSheet by remember { mutableStateOf(false) }
 
+                val falseFlow = remember { MutableStateFlow(false) }
+                val idleFlow = remember { MutableStateFlow(SessionMode.IDLE) }
+
                 val service = standbyService
-                val isStandbyActive by (service?.isStandbyActive ?: remember { mutableStateOf(false) }).collectAsState(false)
-                val isCameraActive by (service?.publisherManager?.isCameraActive ?: remember { mutableStateOf(false) }).collectAsState(false)
-                val isMicActive by (service?.publisherManager?.isMicActive ?: remember { mutableStateOf(false) }).collectAsState(false)
-                val sessionMode by (service?.publisherManager?.sessionMode ?: remember { mutableStateOf(SessionMode.IDLE) }).collectAsState(SessionMode.IDLE)
+                val isStandbyActive by (service?.isStandbyActive ?: falseFlow).collectAsState()
+                val isCameraActive by (service?.publisherManager?.isCameraActive ?: falseFlow).collectAsState()
+                val isMicActive by (service?.publisherManager?.isMicActive ?: falseFlow).collectAsState()
+                val sessionMode by (service?.publisherManager?.sessionMode ?: idleFlow).collectAsState()
 
                 TimerScreen(
                     timerViewModel = timerViewModel,

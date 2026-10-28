@@ -5,6 +5,7 @@ import com.timer.admin.AdminApplication
 import com.timer.core.model.*
 import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
+import io.livekit.android.renderer.SurfaceViewRenderer
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.RemoteVideoTrack
 import io.livekit.android.room.track.Track
@@ -37,11 +38,8 @@ class LiveKitSubscriberManager(private val context: Context) {
         disconnect()
 
         return try {
-            val room = LiveKit.connect(
-                appContext = context,
-                url = grant.serverUrl,
-                token = grant.token
-            )
+            val room = LiveKit.create(appContext = context)
+            room.connect(grant.serverUrl, grant.token)
             currentRoom = room
             _currentMode.value = grant.mode
 
@@ -75,6 +73,10 @@ class LiveKitSubscriberManager(private val context: Context) {
             disconnect()
             false
         }
+    }
+
+    fun initRenderer(renderer: SurfaceViewRenderer) {
+        currentRoom?.initVideoRenderer(renderer)
     }
 
     suspend fun switchRemoteCamera(): Boolean {
