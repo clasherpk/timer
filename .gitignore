@@ -1,0 +1,28 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Environment and Secrets
+.env
+.env.local
+*.keystore
+*.jks
+
+# Node.js
+timer-backend/node_modules/
+timer-backend/dist/
+timer-backend/npm-debug.log*
+timer-backend/yarn-debug.log*
+timer-backend/yarn-error.log*
+
+# Android / Gradle
+.gradle/
+build/
+*/build/
+*/*/build/
+*.iml
+.idea/
+local.properties
+.cxx/
+*.apk
+*.aab

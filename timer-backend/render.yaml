@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: timer-backend
+    env: node
+    plan: free
+    rootDir: timer-backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: ADMIN_SECRET
+        generateValue: true
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
