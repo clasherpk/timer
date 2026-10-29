@@ -1,14 +1,16 @@
 package com.timer.cctv
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
-import android.os.IBinder
 import android.os.Bundle
+import android.os.IBinder
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -55,7 +57,40 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Configure activity to wake screen and display above lockscreen for CCTV remote viewer
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            keyguardManager?.requestDismissKeyguard(this, null)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
+        }
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         requestRequiredPermissions()
+
+        // Auto-start standby service if enabled previously
+        val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("standby_enabled", false)) {
+            val serviceIntent = Intent(this, CctvStandbyService::class.java).apply {
+                action = CctvStandbyService.ACTION_START_STANDBY
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
 
         setContent {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
@@ -87,6 +122,15 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
         }
     }
 

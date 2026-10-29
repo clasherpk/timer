@@ -1,6 +1,7 @@
 package com.timer.cctv
 
 import android.app.Application
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -59,16 +60,30 @@ class TimerApplication : Application() {
                 setShowBadge(false)
             }
 
+            // 3. CCTV Stream Wake-up Channel (High importance with full-screen intent)
+            val streamAlertChannel = NotificationChannel(
+                CHANNEL_CCTV_STREAM_ALERT,
+                "Live Stream Wakeup Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Wakes display and starts camera when remote live stream is requested"
+                enableVibration(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+
             notificationManager.createNotificationChannel(timerChannel)
             notificationManager.createNotificationChannel(standbyChannel)
+            notificationManager.createNotificationChannel(streamAlertChannel)
         }
     }
 
     companion object {
         const val CHANNEL_TIMER_COMPLETION = "channel_timer_completion"
         const val CHANNEL_CCTV_STANDBY = "channel_cctv_standby"
+        const val CHANNEL_CCTV_STREAM_ALERT = "channel_cctv_stream_alert"
         const val NOTIFICATION_ID_STANDBY = 2001
         const val NOTIFICATION_ID_TIMER_COMPLETE = 2002
+        const val NOTIFICATION_ID_WAKE = 2003
 
         lateinit var instance: TimerApplication
             private set

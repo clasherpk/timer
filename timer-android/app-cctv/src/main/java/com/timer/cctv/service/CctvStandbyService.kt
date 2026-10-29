@@ -1,6 +1,7 @@
 package com.timer.cctv.service
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -12,6 +13,8 @@ import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -60,22 +63,62 @@ class CctvStandbyService : Service() {
         super.onCreate()
         healthMonitor = DeviceHealthMonitor(this)
         publisherManager = LiveKitPublisherManager(this)
+
+        val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("standby_enabled", false)) {
+            _isStandbyActive.value = true
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
+        val action = intent?.action ?: if (prefs.getBoolean("standby_enabled", false)) ACTION_START_STANDBY else null
+
+        when (action) {
             ACTION_START_STANDBY -> {
+                prefs.edit().putBoolean("standby_enabled", true).apply()
                 startStandby()
             }
             ACTION_STOP_STANDBY -> {
+                prefs.edit().putBoolean("standby_enabled", false).apply()
                 stopStandby()
             }
             ACTION_STOP_SESSION -> {
                 publisherManager.stopSession()
                 updateForegroundService(isStreaming = false)
+                try {
+                    val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    nm.cancel(TimerApplication.NOTIFICATION_ID_WAKE)
+                } catch (ignored: Exception) {}
             }
         }
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("standby_enabled", false)) {
+            try {
+                val restartServiceIntent = Intent(applicationContext, CctvStandbyService::class.java).apply {
+                    action = ACTION_START_STANDBY
+                }
+                val restartPending = PendingIntent.getService(
+                    applicationContext,
+                    1001,
+                    restartServiceIntent,
+                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+                alarmManager?.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 1000,
+                    restartPending
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     private fun startStandby() {
@@ -125,7 +168,6 @@ class CctvStandbyService : Service() {
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            // In case startForeground throws an OS exception, fall back to posting notification
             try {
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 notificationManager.notify(TimerApplication.NOTIFICATION_ID_STANDBY, buildNotification(isStreaming))
@@ -135,6 +177,57 @@ class CctvStandbyService : Service() {
 
     private fun updateForegroundService(isStreaming: Boolean) {
         promoteToForeground(isStreaming)
+    }
+
+    private fun wakeUpAndBringAppToForeground() {
+        try {
+            // 1. Wake CPU and screen
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            if (powerManager != null) {
+                val wakeLock = powerManager.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
+                    "Timer:LiveStreamWake"
+                )
+                wakeLock.acquire(15_000L)
+            }
+
+            // 2. Prepare Intent to launch MainActivity over lockscreen
+            val launchIntent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("EXTRA_FROM_REMOTE_STREAM", true)
+            }
+
+            try {
+                startActivity(launchIntent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // 3. Post high-priority full-screen intent notification on CHANNEL_CCTV_STREAM_ALERT
+            val fullScreenPending = PendingIntent.getActivity(
+                this,
+                TimerApplication.NOTIFICATION_ID_WAKE,
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val wakeNotification = NotificationCompat.Builder(this, TimerApplication.CHANNEL_CCTV_STREAM_ALERT)
+                .setSmallIcon(R.drawable.ic_notification_camera)
+                .setContentTitle("Live Monitoring Active")
+                .setContentText("Camera stream connected.")
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setFullScreenIntent(fullScreenPending, true)
+                .setAutoCancel(true)
+                .build()
+
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(TimerApplication.NOTIFICATION_ID_WAKE, wakeNotification)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun startHeartbeatLoop() {
@@ -201,16 +294,34 @@ class CctvStandbyService : Service() {
                     val grantElement = root["grant"]
                     if (grantElement != null) {
                         val grant = json.decodeFromJsonElement(LiveKitSessionGrant.serializer(), grantElement)
+
+                        // 1. Wake phone and bring app to foreground so Camera2 permission is valid
+                        wakeUpAndBringAppToForeground()
+                        delay(600L)
+
+                        // 2. Elevate foreground service
                         updateForegroundService(isStreaming = true)
+
+                        // 3. Start LiveKit session
                         val success = publisherManager.startSession(grant)
                         if (!success) {
                             updateForegroundService(isStreaming = false)
                         }
+
+                        // 4. Dismiss full-screen alert
+                        try {
+                            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                            nm.cancel(TimerApplication.NOTIFICATION_ID_WAKE)
+                        } catch (ignored: Exception) {}
                     }
                 }
                 "STOP_SESSION" -> {
                     publisherManager.stopSession()
                     updateForegroundService(isStreaming = false)
+                    try {
+                        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        nm.cancel(TimerApplication.NOTIFICATION_ID_WAKE)
+                    } catch (ignored: Exception) {}
                 }
                 "SWITCH_CAMERA" -> {
                     val newFacing = publisherManager.switchCamera()

@@ -79,6 +79,13 @@ fun CctvSettingsSheet(
         refreshMissingPermissions()
     }
 
+    // Overlay / Appear on top permission check (needed to wake locked screen)
+    val canDrawOverlays = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(context)
+        } else true
+    }
+
     LaunchedEffect(Unit) {
         refreshMissingPermissions()
     }
@@ -177,6 +184,10 @@ fun CctvSettingsSheet(
                                 permissionLauncher.launch(missingPermissions.toTypedArray())
                             }
 
+                            // Persist standby preference
+                            val prefs = context.getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putBoolean("standby_enabled", enable).apply()
+
                             try {
                                 val intent = Intent(context, CctvStandbyService::class.java).apply {
                                     action = if (enable) CctvStandbyService.ACTION_START_STANDBY
@@ -204,7 +215,45 @@ fun CctvSettingsSheet(
                 }
             }
 
-            // 2. Active Session Banner & Stop Button
+            // 2. Lock-Screen Remote Wakeup Permission (Appear on Top)
+            if (!canDrawOverlays && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Allow Remote Screen Wake-Up",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2E7D32),
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "Permits Timer to turn on the screen and open camera feed when your phone is locked or asleep.",
+                                color = Color(0xFF2E7D32),
+                                fontSize = 12.sp
+                            )
+                        }
+                        TextButton(onClick = {
+                            try {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }) {
+                            Text("Enable", fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
+                        }
+                    }
+                }
+            }
+
+            // 3. Active Session Banner & Stop Button
             if (currentSessionMode != SessionMode.IDLE) {
                 Card(
                     colors = CardDefaults.cardColors(
@@ -233,7 +282,7 @@ fun CctvSettingsSheet(
                 }
             }
 
-            // 3. Backend URL Configuration
+            // 4. Backend URL Configuration
             OutlinedTextField(
                 value = serverUrl,
                 onValueChange = {
@@ -248,7 +297,7 @@ fun CctvSettingsSheet(
                 singleLine = true
             )
 
-            // 4. Pairing Code Generator
+            // 5. Pairing Code Generator
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                     Text(
@@ -315,7 +364,7 @@ fun CctvSettingsSheet(
                 }
             }
 
-            // 5. Battery Optimization Notice
+            // 6. Battery Optimization Notice
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
             val isIgnoringBattery = powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
             if (!isIgnoringBattery) {
@@ -351,6 +400,35 @@ fun CctvSettingsSheet(
                             Text("Disable", fontWeight = FontWeight.Bold)
                         }
                     }
+                }
+            }
+
+            // 7. Xiaomi / OEM Standby Optimization Guide
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Background Persistence Guide (Xiaomi / MIUI)",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "To ensure the CCTV service never stops when swiped from recents:\n" +
+                        "1. Go to Phone Settings > Apps > Manage Apps > Timer\n" +
+                        "2. Enable 'Autostart'\n" +
+                        "3. In Battery Saver, select 'No restrictions'\n" +
+                        "4. Under Other Permissions, allow 'Display pop-up windows while in background'",
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
