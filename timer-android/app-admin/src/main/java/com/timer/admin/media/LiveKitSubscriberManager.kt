@@ -45,7 +45,7 @@ class LiveKitSubscriberManager(private val context: Context) {
             _currentMode.value = grant.mode
 
             scope.launch {
-                room.events.collect { event ->
+                room.events.collect { event: RoomEvent ->
                     when (event) {
                         is RoomEvent.TrackSubscribed -> {
                             if (event.track is RemoteVideoTrack) {
