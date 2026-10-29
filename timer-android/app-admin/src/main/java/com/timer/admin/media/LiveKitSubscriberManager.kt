@@ -7,15 +7,13 @@ import io.livekit.android.LiveKit
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.renderer.SurfaceViewRenderer
 import io.livekit.android.room.Room
+import io.livekit.android.room.track.RemoteAudioTrack
 import io.livekit.android.room.track.RemoteVideoTrack
 import io.livekit.android.room.track.Track
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class LiveKitSubscriberManager(private val context: Context) {
@@ -45,19 +43,19 @@ class LiveKitSubscriberManager(private val context: Context) {
             _currentMode.value = grant.mode
 
             scope.launch {
-                room.events.collect { event: RoomEvent ->
+                room.events.collect { event ->
                     when (event) {
                         is RoomEvent.TrackSubscribed -> {
                             if (event.track is RemoteVideoTrack) {
                                 _videoTrack.value = event.track as RemoteVideoTrack
-                            } else if (event.track.kind == Track.Kind.AUDIO) {
+                            } else if (event.track is RemoteAudioTrack) {
                                 _isAudioActive.value = true
                             }
                         }
                         is RoomEvent.TrackUnsubscribed -> {
                             if (event.track is RemoteVideoTrack) {
                                 _videoTrack.value = null
-                            } else if (event.track.kind == Track.Kind.AUDIO) {
+                            } else if (event.track is RemoteAudioTrack) {
                                 _isAudioActive.value = false
                             }
                         }
