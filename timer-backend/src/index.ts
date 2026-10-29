@@ -80,7 +80,7 @@ fastify.post<{ Body: { adminDeviceId: string; pairingCode: string } }>(
     }
     const result = deviceStore.pairWithCode(adminDeviceId, pairingCode);
     if (!result.success) {
-      return reply.code(400).send({ error: result.error });
+      return reply.code(400).send({ success: false, error: result.error });
     }
     return {
       success: true,
@@ -154,23 +154,24 @@ fastify.post<{
 }>('/api/session/start', async (request, reply) => {
   const { adminDeviceId, mode } = request.body;
   if (!adminDeviceId || !mode || mode === 'idle') {
-    return reply.code(400).send({ error: 'Missing adminDeviceId or invalid mode' });
+    return reply.code(400).send({ success: false, error: 'Missing adminDeviceId or invalid mode' });
   }
 
   const admin = deviceStore.getDevice(adminDeviceId);
   if (!admin || !admin.pairedDeviceId) {
-    return reply.code(400).send({ error: 'Admin is not paired with any CCTV phone' });
+    return reply.code(400).send({ success: false, error: 'Admin is not paired with any CCTV phone' });
   }
 
   const cctv = deviceStore.getDevice(admin.pairedDeviceId);
   if (!cctv) {
-    return reply.code(404).send({ error: 'Paired CCTV device record not found' });
+    return reply.code(404).send({ success: false, error: 'Paired CCTV device record not found' });
   }
 
   const cctvStatus = deviceStore.computeDeviceStatus(cctv);
   if (cctvStatus === 'OFFLINE') {
     return reply.code(503).send({
-      error: 'CCTV phone is offline. Open Timer on the spare phone to resume standby.',
+      success: false,
+      error: 'CCTV phone is offline. Open Timer on the spare phone and enable Remote-Ready Standby.',
     });
   }
 

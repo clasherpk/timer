@@ -149,7 +149,7 @@ data class PairingSubmitRequest(
 
 @Serializable
 data class PairingSubmitResponse(
-    val success: Boolean,
+    val success: Boolean = false,
     val cctvDeviceId: String? = null,
     val sharedSecret: String? = null,
     val error: String? = null
@@ -185,9 +185,9 @@ data class StartSessionRequest(
 
 @Serializable
 data class StartSessionResponse(
-    val success: Boolean,
-    val mode: SessionMode,
-    val adminGrant: LiveKitSessionGrant,
+    val success: Boolean = false,
+    val mode: SessionMode = SessionMode.IDLE,
+    val adminGrant: LiveKitSessionGrant? = null,
     val cctvGrant: LiveKitSessionGrant? = null,
     val error: String? = null
 )

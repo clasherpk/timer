@@ -54,20 +54,34 @@ class TimerApiClient(
     // 2. Generate Pairing Code (CCTV)
     suspend fun generatePairingCode(cctvDeviceId: String): Result<PairingGenerateResponse> {
         return runCatching {
-            httpClient.post("$baseUrl/api/pairing/generate") {
+            val response = httpClient.post("$baseUrl/api/pairing/generate") {
                 contentType(ContentType.Application.Json)
                 setBody(PairingGenerateRequest(cctvDeviceId))
-            }.body()
+            }
+            if (!response.status.isSuccess()) {
+                val err = runCatching { response.body<Map<String, String>>()["error"] }.getOrNull()
+                throw Exception(err ?: "Failed to generate pairing code")
+            }
+            response.body()
         }
     }
 
     // 3. Submit Pairing Code (Admin)
     suspend fun submitPairing(adminDeviceId: String, code: String): Result<PairingSubmitResponse> {
         return runCatching {
-            httpClient.post("$baseUrl/api/pairing/pair") {
+            val response = httpClient.post("$baseUrl/api/pairing/pair") {
                 contentType(ContentType.Application.Json)
                 setBody(PairingSubmitRequest(adminDeviceId, code))
-            }.body()
+            }
+            if (!response.status.isSuccess()) {
+                val err = runCatching { response.body<Map<String, String>>()["error"] }.getOrNull()
+                throw Exception(err ?: "Invalid pairing code or request rejected")
+            }
+            val body = response.body<PairingSubmitResponse>()
+            if (!body.success) {
+                throw Exception(body.error ?: "Pairing rejected")
+            }
+            body
         }
     }
 
@@ -85,27 +99,45 @@ class TimerApiClient(
     // 5. Send Heartbeat (CCTV)
     suspend fun sendHeartbeat(deviceId: String, health: DeviceHealth): Result<HeartbeatResponse> {
         return runCatching {
-            httpClient.post("$baseUrl/api/heartbeat") {
+            val response = httpClient.post("$baseUrl/api/heartbeat") {
                 contentType(ContentType.Application.Json)
                 setBody(HeartbeatRequest(deviceId, health))
-            }.body()
+            }
+            if (!response.status.isSuccess()) {
+                throw Exception("Heartbeat failed: ${response.status.value}")
+            }
+            response.body()
         }
     }
 
     // 6. Get Paired CCTV Status (Admin)
     suspend fun getPairedDeviceStatus(adminDeviceId: String): Result<PairedDeviceStatusResponse> {
         return runCatching {
-            httpClient.get("$baseUrl/api/device/$adminDeviceId/status").body()
+            val response = httpClient.get("$baseUrl/api/device/$adminDeviceId/status")
+            if (!response.status.isSuccess()) {
+                val err = runCatching { response.body<Map<String, String>>()["error"] }.getOrNull()
+                throw Exception(err ?: "Device status unavailable")
+            }
+            response.body()
         }
     }
 
     // 7. Start Session (Admin)
     suspend fun startSession(adminDeviceId: String, mode: SessionMode): Result<StartSessionResponse> {
         return runCatching {
-            httpClient.post("$baseUrl/api/session/start") {
+            val response = httpClient.post("$baseUrl/api/session/start") {
                 contentType(ContentType.Application.Json)
                 setBody(StartSessionRequest(adminDeviceId, mode))
-            }.body()
+            }
+            if (!response.status.isSuccess()) {
+                val err = runCatching { response.body<Map<String, String>>()["error"] }.getOrNull()
+                throw Exception(err ?: "Cannot start session: ${response.status.description}")
+            }
+            val body = response.body<StartSessionResponse>()
+            if (!body.success) {
+                throw Exception(body.error ?: "Session start rejected")
+            }
+            body
         }
     }
 

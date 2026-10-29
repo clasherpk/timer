@@ -106,8 +106,9 @@ class AdminViewModel : ViewModel() {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = app.apiClient.startSession(app.deviceId, mode)
             result.onSuccess { res ->
-                if (res.success) {
-                    val connected = subscriberManager.connect(res.adminGrant)
+                val grant = res.adminGrant
+                if (res.success && grant != null) {
+                    val connected = subscriberManager.connect(grant)
                     if (connected) {
                         _uiState.update {
                             it.copy(
