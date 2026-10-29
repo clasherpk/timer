@@ -1,11 +1,16 @@
 package com.timer.cctv.ui.cctv
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -23,6 +28,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.timer.cctv.TimerApplication
 import com.timer.cctv.service.CctvStandbyService
 import com.timer.core.model.SessionMode
@@ -48,6 +54,35 @@ fun CctvSettingsSheet(
     var pairingLoading by remember { mutableStateOf(false) }
     var pairingError by remember { mutableStateOf<String?>(null) }
 
+    // Permissions check
+    var missingPermissions by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    fun refreshMissingPermissions() {
+        val list = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            list.add(Manifest.permission.CAMERA)
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            list.add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                list.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        missingPermissions = list
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        refreshMissingPermissions()
+    }
+
+    LaunchedEffect(Unit) {
+        refreshMissingPermissions()
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -72,6 +107,41 @@ fun CctvSettingsSheet(
                 )
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, contentDescription = "Close")
+                }
+            }
+
+            // Permissions Alert Banner (if any missing)
+            if (missingPermissions.isNotEmpty()) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFF856404))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Permissions Needed",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF856404)
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Camera, microphone, and notification permissions are required for remote standby and streaming.",
+                            fontSize = 12.sp,
+                            color = Color(0xFF856404)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                permissionLauncher.launch(missingPermissions.toTypedArray())
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF856404))
+                        ) {
+                            Text("Grant Permissions", color = Color.White)
+                        }
+                    }
                 }
             }
 
@@ -103,18 +173,31 @@ fun CctvSettingsSheet(
                     Switch(
                         checked = isStandbyActive,
                         onCheckedChange = { enable ->
-                            val intent = Intent(context, CctvStandbyService::class.java).apply {
-                                action = if (enable) CctvStandbyService.ACTION_START_STANDBY
-                                else CctvStandbyService.ACTION_STOP_STANDBY
+                            if (enable && missingPermissions.isNotEmpty()) {
+                                permissionLauncher.launch(missingPermissions.toTypedArray())
                             }
-                            if (enable) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    context.startForegroundService(intent)
-                                } else {
-                                    context.startService(intent)
+
+                            try {
+                                val intent = Intent(context, CctvStandbyService::class.java).apply {
+                                    action = if (enable) CctvStandbyService.ACTION_START_STANDBY
+                                    else CctvStandbyService.ACTION_STOP_STANDBY
                                 }
-                            } else {
-                                context.stopService(intent)
+                                if (enable) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        context.startForegroundService(intent)
+                                    } else {
+                                        context.startService(intent)
+                                    }
+                                } else {
+                                    context.stopService(intent)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                Toast.makeText(
+                                    context,
+                                    "Failed to toggle standby: ${e.localizedMessage}",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         }
                     )

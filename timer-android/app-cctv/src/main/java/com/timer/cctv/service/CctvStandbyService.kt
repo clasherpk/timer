@@ -1,13 +1,22 @@
 package com.timer.cctv.service
 
+import android.Manifest
+import android.app.Notification
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import com.timer.cctv.MainActivity
+import com.timer.cctv.R
 import com.timer.cctv.TimerApplication
 import com.timer.cctv.media.LiveKitPublisherManager
 import com.timer.cctv.telemetry.DeviceHealthMonitor
@@ -63,7 +72,7 @@ class CctvStandbyService : Service() {
             }
             ACTION_STOP_SESSION -> {
                 publisherManager.stopSession()
-                updateNotification(false)
+                updateForegroundService(isStreaming = false)
             }
         }
         return START_STICKY
@@ -71,8 +80,7 @@ class CctvStandbyService : Service() {
 
     private fun startStandby() {
         _isStandbyActive.value = true
-        startForeground(TimerApplication.NOTIFICATION_ID_STANDBY, buildNotification(isStreaming = false))
-
+        promoteToForeground(isStreaming = false)
         startHeartbeatLoop()
         startWebSocketSignaling()
     }
@@ -82,8 +90,51 @@ class CctvStandbyService : Service() {
         publisherManager.stopSession()
         heartbeatJob?.cancel()
         webSocketJob?.cancel()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         stopSelf()
+    }
+
+    private fun promoteToForeground(isStreaming: Boolean) {
+        try {
+            val notification = buildNotification(isStreaming)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                if (isStreaming && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val hasCamera = ContextCompat.checkSelfPermission(
+                        this, Manifest.permission.CAMERA
+                    ) == PackageManager.PERMISSION_GRANTED
+                    val hasMic = ContextCompat.checkSelfPermission(
+                        this, Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (hasCamera) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    if (hasMic) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                }
+                ServiceCompat.startForeground(
+                    this,
+                    TimerApplication.NOTIFICATION_ID_STANDBY,
+                    notification,
+                    type
+                )
+            } else {
+                startForeground(TimerApplication.NOTIFICATION_ID_STANDBY, notification)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // In case startForeground throws an OS exception, fall back to posting notification
+            try {
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.notify(TimerApplication.NOTIFICATION_ID_STANDBY, buildNotification(isStreaming))
+            } catch (ignored: Exception) {}
+        }
+    }
+
+    private fun updateForegroundService(isStreaming: Boolean) {
+        promoteToForeground(isStreaming)
     }
 
     private fun startHeartbeatLoop() {
@@ -150,13 +201,16 @@ class CctvStandbyService : Service() {
                     val grantElement = root["grant"]
                     if (grantElement != null) {
                         val grant = json.decodeFromJsonElement(LiveKitSessionGrant.serializer(), grantElement)
+                        updateForegroundService(isStreaming = true)
                         val success = publisherManager.startSession(grant)
-                        updateNotification(isStreaming = success)
+                        if (!success) {
+                            updateForegroundService(isStreaming = false)
+                        }
                     }
                 }
                 "STOP_SESSION" -> {
                     publisherManager.stopSession()
-                    updateNotification(isStreaming = false)
+                    updateForegroundService(isStreaming = false)
                 }
                 "SWITCH_CAMERA" -> {
                     val newFacing = publisherManager.switchCamera()
@@ -176,12 +230,7 @@ class CctvStandbyService : Service() {
         }
     }
 
-    private fun updateNotification(isStreaming: Boolean) {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        notificationManager.notify(TimerApplication.NOTIFICATION_ID_STANDBY, buildNotification(isStreaming))
-    }
-
-    private fun buildNotification(isStreaming: Boolean): android.app.Notification {
+    private fun buildNotification(isStreaming: Boolean): Notification {
         val openIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -202,18 +251,21 @@ class CctvStandbyService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val iconRes = if (isStreaming) R.drawable.ic_notification_camera else R.drawable.ic_notification_timer
+
         val builder = NotificationCompat.Builder(this, TimerApplication.CHANNEL_CCTV_STANDBY)
-            .setSmallIcon(if (isStreaming) android.R.drawable.presence_video_online else android.R.drawable.ic_lock_idle_alarm)
+            .setSmallIcon(iconRes)
             .setContentTitle(if (isStreaming) "Live Monitoring Active" else "Timer Remote Standby")
             .setContentText(
                 if (isStreaming) "Camera/Microphone is streaming on-demand."
                 else "Ready for authorized remote access. Sensors are idle."
             )
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setContentIntent(pendingOpen)
 
         if (isStreaming) {
-            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Live Session", pendingStopSession)
+            builder.addAction(R.drawable.ic_stop, "Stop Live Session", pendingStopSession)
         }
 
         return builder.build()

@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.timer.cctv.MainActivity
+import com.timer.cctv.R
 import com.timer.cctv.TimerApplication
 import com.timer.core.model.TimerState
 import kotlinx.coroutines.Job
@@ -148,7 +149,7 @@ class TimerViewModel(
             val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
             val notification = NotificationCompat.Builder(context, TimerApplication.CHANNEL_TIMER_COMPLETION)
-                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setSmallIcon(R.drawable.ic_notification_timer)
                 .setContentTitle("Timer Finished!")
                 .setContentText("Your countdown of ${_uiState.value.inputHours}h ${_uiState.value.inputMinutes}m ${_uiState.value.inputSeconds}s has completed.")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)

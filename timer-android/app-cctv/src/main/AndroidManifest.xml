@@ -21,9 +21,9 @@
     <application
         android:name=".TimerApplication"
         android:allowBackup="true"
-        android:icon="@android:drawable/ic_lock_idle_alarm"
+        android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@android:drawable/ic_lock_idle_alarm"
+        android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
