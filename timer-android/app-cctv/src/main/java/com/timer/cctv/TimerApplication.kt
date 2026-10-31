@@ -21,14 +21,9 @@ class TimerApplication : Application() {
         super.onCreate()
         instance = this
 
-        // Retrieve or generate persistent device UUID
         val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
-        var id = prefs.getString("device_id", null)
-        if (id == null) {
-            id = UUID.randomUUID().toString()
-            prefs.edit().putString("device_id", id).apply()
-        }
-        deviceId = id
+        deviceId = "cctv_primary"
+        prefs.edit().putString("device_id", deviceId).apply()
 
         val savedServerUrl = prefs.getString("backend_url", "https://timer-hutq.onrender.com") ?: "https://timer-hutq.onrender.com"
         apiClient = TimerApiClient(savedServerUrl)

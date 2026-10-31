@@ -1,6 +1,9 @@
 package com.timer.admin.media
 
 import android.content.Context
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.os.Build
 import com.timer.admin.AdminApplication
 import com.timer.core.model.*
 import io.livekit.android.LiveKit
@@ -33,6 +36,39 @@ class LiveKitSubscriberManager(private val context: Context) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private fun routeToSpeakerphone() {
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val speakerDevice = audioManager.availableCommunicationDevices.find {
+                    it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                }
+                if (speakerDevice != null) {
+                    audioManager.setCommunicationDevice(speakerDevice)
+                }
+            }
+            @Suppress("DEPRECATION")
+            audioManager.isSpeakerphoneOn = true
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun resetAudioRouting() {
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                audioManager.clearCommunicationDevice()
+            }
+            @Suppress("DEPRECATION")
+            audioManager.isSpeakerphoneOn = false
+            audioManager.mode = AudioManager.MODE_NORMAL
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     suspend fun connect(grant: LiveKitSessionGrant): Boolean {
         disconnect()
 
@@ -41,6 +77,7 @@ class LiveKitSubscriberManager(private val context: Context) {
             room.connect(grant.serverUrl, grant.token)
             currentRoom = room
             _currentMode.value = grant.mode
+            routeToSpeakerphone()
 
             scope.launch {
                 room.events.collect { event ->
@@ -50,6 +87,7 @@ class LiveKitSubscriberManager(private val context: Context) {
                                 _videoTrack.value = event.track as RemoteVideoTrack
                             } else if (event.track is RemoteAudioTrack) {
                                 _isAudioActive.value = true
+                                routeToSpeakerphone()
                             }
                         }
                         is RoomEvent.TrackUnsubscribed -> {
@@ -100,6 +138,7 @@ class LiveKitSubscriberManager(private val context: Context) {
 
     fun disconnect() {
         try {
+            resetAudioRouting()
             currentRoom?.disconnect()
             currentRoom?.release()
             currentRoom = null

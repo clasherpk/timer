@@ -35,8 +35,8 @@ class AdminViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(
         AdminUiState(
             serverUrl = app.apiClient.getBaseUrl(),
-            isPaired = app.pairedCctvDeviceId != null,
-            pairedCctvId = app.pairedCctvDeviceId
+            isPaired = true,
+            pairedCctvId = "cctv_primary"
         )
     )
     val uiState: StateFlow<AdminUiState> = _uiState.asStateFlow()

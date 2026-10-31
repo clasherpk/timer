@@ -185,8 +185,10 @@ fastify.post<{
     return reply.code(404).send({ success: false, error: 'Paired CCTV device record not found' });
   }
 
+  const cctvSocket = deviceStore.getSocket(cctv.deviceId);
+  const isSocketAlive = cctvSocket && cctvSocket.readyState === cctvSocket.OPEN;
   const cctvStatus = deviceStore.computeDeviceStatus(cctv);
-  if (cctvStatus === 'OFFLINE') {
+  if (cctvStatus === 'OFFLINE' && !isSocketAlive) {
     return reply.code(503).send({
       success: false,
       error: 'CCTV phone is offline. Open Timer on the spare phone and enable Remote-Ready Standby.',
@@ -197,7 +199,6 @@ fastify.post<{
   const tokens = await liveKitService.createTokens(cctv.deviceId, admin.deviceId, mode);
 
   // Send START_SESSION command to CCTV client over active WebSocket if available
-  const cctvSocket = deviceStore.getSocket(cctv.deviceId);
   const commandPayload = {
     type: 'START_SESSION',
     mode,

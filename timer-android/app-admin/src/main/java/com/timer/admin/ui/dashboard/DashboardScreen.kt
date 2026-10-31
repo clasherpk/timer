@@ -457,43 +457,43 @@ fun SessionLauncherCard(
         ) {
             Text("Initiate Remote Monitoring", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Select a session mode. Sensors on the spare phone activate on-demand and are immediately released when stopped.",
+                "Live stream video and real-time audio through your phone's loudspeaker. Sensors activate on-demand.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            // Primary Big Button: Camera + Audio
+            Button(
+                onClick = onStartCombined,
+                enabled = !isLoading,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+            ) {
+                Icon(Icons.Default.VideoCall, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(if (isLoading) "Connecting Stream..." else "Start Live Camera + Audio", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+
+            // Secondary row: Video Only / Audio Only
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
+                OutlinedButton(
                     onClick = onStartCameraOnly,
                     enabled = !isLoading,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Videocam, contentDescription = "Camera Only")
-                        Text("Camera", fontSize = 12.sp)
-                    }
+                    Icon(Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Camera Only", fontSize = 12.sp)
                 }
 
-                Button(
+                OutlinedButton(
                     onClick = onStartAudioOnly,
                     enabled = !isLoading,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Mic, contentDescription = "Audio Only")
-                        Text("Audio", fontSize = 12.sp)
-                    }
-                }
-
-                Button(
-                    onClick = onStartCombined,
-                    enabled = !isLoading,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.VideoCall, contentDescription = "Both")
-                        Text("Cam + Audio", fontSize = 12.sp)
-                    }
+                    Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Audio Only", fontSize = 12.sp)
                 }
             }
         }

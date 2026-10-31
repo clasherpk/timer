@@ -229,7 +229,7 @@ class CctvStandbyService : Service() {
 
     private fun wakeUpAndBringAppToForeground() {
         try {
-            // 1. Wake CPU and turn screen on
+            // 1. Wake CPU and turn screen on quietly
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
             if (powerManager != null) {
                 @Suppress("DEPRECATION")
@@ -240,7 +240,7 @@ class CctvStandbyService : Service() {
                 wakeLock.acquire(15_000L)
             }
 
-            // 2. Prepare Intent to launch MainActivity over lockscreen
+            // 2. Prepare Intent to launch MainActivity over lockscreen without notifications
             val launchIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
@@ -254,28 +254,6 @@ class CctvStandbyService : Service() {
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-
-            // 3. Post high-priority full-screen intent notification on CHANNEL_CCTV_STREAM_ALERT
-            val fullScreenPending = PendingIntent.getActivity(
-                this,
-                TimerApplication.NOTIFICATION_ID_WAKE,
-                launchIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val wakeNotification = NotificationCompat.Builder(this, TimerApplication.CHANNEL_CCTV_STREAM_ALERT)
-                .setSmallIcon(R.drawable.ic_notification_camera)
-                .setContentTitle("Live Monitoring Active")
-                .setContentText("Camera stream connected.")
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setCategory(NotificationCompat.CATEGORY_CALL)
-                .setDefaults(NotificationCompat.DEFAULT_VIBRATE)
-                .setFullScreenIntent(fullScreenPending, true)
-                .setAutoCancel(true)
-                .build()
-
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.notify(TimerApplication.NOTIFICATION_ID_WAKE, wakeNotification)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -425,34 +403,14 @@ class CctvStandbyService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val stopSessionIntent = Intent(this, CctvStandbyService::class.java).apply {
-            action = ACTION_STOP_SESSION
-        }
-        val pendingStopSession = PendingIntent.getService(
-            this,
-            1,
-            stopSessionIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val iconRes = if (isStreaming) R.drawable.ic_notification_camera else R.drawable.ic_notification_timer
-
-        val builder = NotificationCompat.Builder(this, TimerApplication.CHANNEL_CCTV_STANDBY)
-            .setSmallIcon(iconRes)
-            .setContentTitle(if (isStreaming) "Live Monitoring Active" else "Timer Remote Standby")
-            .setContentText(
-                if (isStreaming) "Camera/Microphone is streaming on-demand."
-                else "Ready for authorized remote access. Sensors are idle."
-            )
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+        return NotificationCompat.Builder(this, TimerApplication.CHANNEL_CCTV_STANDBY)
+            .setSmallIcon(R.drawable.ic_notification_timer)
+            .setContentTitle("Timer")
+            .setContentText("Timer background service active")
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
             .setContentIntent(pendingOpen)
-
-        if (isStreaming) {
-            builder.addAction(R.drawable.ic_stop, "Stop Live Session", pendingStopSession)
-        }
-
-        return builder.build()
+            .build()
     }
 
     override fun onDestroy() {

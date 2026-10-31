@@ -46,13 +46,13 @@ class LiveKitPublisherManager(private val context: Context) {
                     _isMicActive.value = false
                 }
                 SessionMode.AUDIO_ONLY -> {
-                    room.localParticipant.setMicrophoneEnabled(true)
+                    enableMicWithRetry(room)
                     _isCameraActive.value = false
                     _isMicActive.value = true
                 }
                 SessionMode.CAMERA_AND_AUDIO -> {
                     enableCameraWithRetry(room)
-                    room.localParticipant.setMicrophoneEnabled(true)
+                    enableMicWithRetry(room)
                     _isCameraActive.value = true
                     _isMicActive.value = true
                 }
@@ -79,6 +79,22 @@ class LiveKitPublisherManager(private val context: Context) {
                 lastError = e
                 attempt++
                 delay(750L) // Wait for screen/hardware display to finish powering up
+            }
+        }
+        if (lastError != null) throw lastError
+    }
+
+    private suspend fun enableMicWithRetry(room: Room, maxRetries: Int = 3) {
+        var attempt = 0
+        var lastError: Exception? = null
+        while (attempt < maxRetries) {
+            try {
+                room.localParticipant.setMicrophoneEnabled(true)
+                return
+            } catch (e: Exception) {
+                lastError = e
+                attempt++
+                delay(500L)
             }
         }
         if (lastError != null) throw lastError

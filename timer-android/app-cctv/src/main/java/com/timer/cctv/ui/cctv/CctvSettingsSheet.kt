@@ -301,79 +301,21 @@ fun CctvSettingsSheet(
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "Auto-Pairing Enabled",
+                            text = "Auto-Paired with Admin Phone",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF2E7D32)
                         )
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "This spare phone automatically pairs with your Timer Admin phone. No manual pairing codes required.",
+                        text = "Both phones are permanently paired to this private CCTV network. No pairing codes or manual setup needed.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Text(
-                        text = "Device ID: ${app.deviceId.take(8)}...",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    if (pairingCode != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
-                                .padding(12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("MANUAL PAIRING CODE", style = MaterialTheme.typography.labelSmall)
-                                Text(
-                                    text = pairingCode!!,
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 4.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
-
-                    if (pairingError != null) {
-                        Text(pairingError!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-
-                    OutlinedButton(
-                        onClick = {
-                            coroutineScope.launch {
-                                pairingLoading = true
-                                pairingError = null
-                                val result = app.apiClient.generatePairingCode(app.deviceId)
-                                pairingLoading = false
-                                result.onSuccess {
-                                    pairingCode = it.pairingCode
-                                }.onFailure {
-                                    pairingError = it.message ?: "Failed to generate pairing code"
-                                }
-                            }
-                        },
-                        enabled = !pairingLoading,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (pairingLoading) "Generating..." else "Generate Backup Pairing Code")
-                    }
                 }
             }
 

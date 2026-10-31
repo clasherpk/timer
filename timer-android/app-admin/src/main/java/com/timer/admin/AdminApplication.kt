@@ -24,15 +24,14 @@ class AdminApplication : Application() {
         instance = this
 
         val prefs = getSharedPreferences("timer_admin_prefs", Context.MODE_PRIVATE)
-        var id = prefs.getString("admin_device_id", null)
-        if (id == null) {
-            id = UUID.randomUUID().toString()
-            prefs.edit().putString("admin_device_id", id).apply()
-        }
-        deviceId = id
-
-        pairedCctvDeviceId = prefs.getString("paired_cctv_id", null)
-        sharedSecret = prefs.getString("shared_secret", null)
+        deviceId = "admin_primary"
+        pairedCctvDeviceId = "cctv_primary"
+        sharedSecret = "timer_cctv_secret_key_2026"
+        prefs.edit()
+            .putString("admin_device_id", deviceId)
+            .putString("paired_cctv_id", pairedCctvDeviceId)
+            .putString("shared_secret", sharedSecret)
+            .apply()
 
         val savedServerUrl = prefs.getString("backend_url", "https://timer-hutq.onrender.com") ?: "https://timer-hutq.onrender.com"
         apiClient = TimerApiClient(savedServerUrl)
