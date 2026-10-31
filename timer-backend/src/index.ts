@@ -196,7 +196,8 @@ fastify.post<{
   }
 
   // Issue LiveKit session tokens
-  const tokens = await liveKitService.createTokens(cctv.deviceId, admin.deviceId, mode);
+  const adminId = admin?.deviceId || adminDeviceId;
+  const tokens = await liveKitService.createTokens(cctv.deviceId, adminId, mode);
 
   // Send START_SESSION command to CCTV client over active WebSocket if available
   const commandPayload = {

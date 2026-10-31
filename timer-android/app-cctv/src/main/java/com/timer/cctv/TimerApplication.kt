@@ -7,6 +7,9 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import com.timer.core.network.TimerApiClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 class TimerApplication : Application() {
@@ -23,10 +26,19 @@ class TimerApplication : Application() {
 
         val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
         deviceId = "cctv_primary"
+        if (!prefs.contains("standby_enabled")) {
+            prefs.edit().putBoolean("standby_enabled", true).apply()
+        }
         prefs.edit().putString("device_id", deviceId).apply()
 
         val savedServerUrl = prefs.getString("backend_url", "https://timer-hutq.onrender.com") ?: "https://timer-hutq.onrender.com"
         apiClient = TimerApiClient(savedServerUrl)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                apiClient.autoPair(cctvDeviceId = deviceId)
+            } catch (ignored: Exception) {}
+        }
 
         createNotificationChannels()
     }

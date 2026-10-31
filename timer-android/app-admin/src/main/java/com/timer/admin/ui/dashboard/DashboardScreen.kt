@@ -57,11 +57,6 @@ fun DashboardScreen(
                     }) {
                         Icon(Icons.Default.Dns, contentDescription = "Server URL")
                     }
-                    if (uiState.isPaired) {
-                        IconButton(onClick = { viewModel.unpair() }) {
-                            Icon(Icons.Default.LinkOff, contentDescription = "Unpair Device")
-                        }
-                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )

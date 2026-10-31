@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
 
         // Auto-start standby service if enabled previously
         val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
-        val initialStandby = prefs.getBoolean("standby_enabled", false)
+        val initialStandby = prefs.getBoolean("standby_enabled", true)
         if (initialStandby) {
             val serviceIntent = Intent(this, CctvStandbyService::class.java).apply {
                 action = CctvStandbyService.ACTION_START_STANDBY
