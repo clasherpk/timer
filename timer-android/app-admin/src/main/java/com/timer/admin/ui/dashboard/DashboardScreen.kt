@@ -92,9 +92,8 @@ fun DashboardScreen(
             }
 
             if (!uiState.isPaired) {
-                // Pairing Card
+                // Auto-Pairing Card
                 PairingCard(
-                    onPair = { code -> viewModel.pairDevice(code) },
                     onAutoPair = { viewModel.attemptAutoPair() },
                     isLoading = uiState.isLoading
                 )
@@ -163,12 +162,9 @@ fun DashboardScreen(
 
 @Composable
 fun PairingCard(
-    onPair: (String) -> Unit,
     onAutoPair: () -> Unit,
     isLoading: Boolean
 ) {
-    var code by remember { mutableStateOf("") }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -179,10 +175,10 @@ fun PairingCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Default.PhoneAndroid, contentDescription = "Pairing", tint = MaterialTheme.colorScheme.primary)
-                Text("Pair with Spare Phone", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Connect Spare Phone", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             Text(
-                "Auto-pairing links your two personal phones automatically when both apps are installed. You can also manually enter a 6-letter pairing code.",
+                "Both phones are designated for your private CCTV link. Tap below to automatically sync with your spare phone.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -190,40 +186,12 @@ fun PairingCard(
             Button(
                 onClick = onAutoPair,
                 enabled = !isLoading,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(if (isLoading) "Connecting..." else "Auto-Link With Spare Phone")
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                HorizontalDivider(modifier = Modifier.weight(1f))
-                Text("  OR USE CODE  ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                HorizontalDivider(modifier = Modifier.weight(1f))
-            }
-
-            OutlinedTextField(
-                value = code,
-                onValueChange = { if (it.length <= 6) code = it.uppercase() },
-                label = { Text("6-Letter Pairing Code") },
-                placeholder = { Text("e.g. 7K9M2P") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = LocalTextStyle.current.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 4.sp
-                )
-            )
-
-            OutlinedButton(
-                onClick = { onPair(code.trim()) },
-                enabled = code.length == 6 && !isLoading,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Submit Code")
+                Text(if (isLoading) "Connecting to Spare Phone..." else "Auto-Connect to Spare Phone")
             }
         }
     }

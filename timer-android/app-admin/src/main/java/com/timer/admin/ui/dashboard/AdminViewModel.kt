@@ -17,8 +17,8 @@ import kotlinx.coroutines.launch
 
 data class AdminUiState(
     val serverUrl: String = "https://timer-hutq.onrender.com",
-    val isPaired: Boolean = false,
-    val pairedCctvId: String? = null,
+    val isPaired: Boolean = true,
+    val pairedCctvId: String? = "cctv_primary",
     val statusCategory: DeviceStatusCategory = DeviceStatusCategory.OFFLINE,
     val lastSeenAt: Long = 0L,
     val health: DeviceHealth? = null,
@@ -149,9 +149,15 @@ class AdminViewModel : ViewModel() {
                         }
                     }
                 } else {
+                    if (res.error?.contains("not paired", ignoreCase = true) == true) {
+                        attemptAutoPair()
+                    }
                     _uiState.update { it.copy(isLoading = false, errorMessage = res.error ?: "Session start rejected") }
                 }
             }.onFailure { err ->
+                if (err.message?.contains("not paired", ignoreCase = true) == true) {
+                    attemptAutoPair()
+                }
                 _uiState.update { it.copy(isLoading = false, errorMessage = err.message ?: "Backend error") }
             }
         }
@@ -196,15 +202,21 @@ class AdminViewModel : ViewModel() {
             result.onSuccess { res ->
                 _uiState.update {
                     it.copy(
+                        isPaired = true,
+                        pairedCctvId = res.cctvDeviceId,
                         statusCategory = res.statusCategory,
                         lastSeenAt = res.lastSeenAt,
                         health = res.health
                     )
                 }
-            }.onFailure {
-                // If backend unreachable, mark as offline/stale
-                _uiState.update {
-                    it.copy(statusCategory = DeviceStatusCategory.STALE)
+            }.onFailure { err ->
+                if (err.message?.contains("not paired", ignoreCase = true) == true ||
+                    err.message?.contains("not found", ignoreCase = true) == true) {
+                    attemptAutoPair()
+                } else {
+                    _uiState.update {
+                        it.copy(statusCategory = DeviceStatusCategory.STALE)
+                    }
                 }
             }
         }

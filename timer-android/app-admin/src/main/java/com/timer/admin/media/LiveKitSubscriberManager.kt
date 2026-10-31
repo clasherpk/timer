@@ -6,7 +6,11 @@ import android.media.AudioManager
 import android.os.Build
 import com.timer.admin.AdminApplication
 import com.timer.core.model.*
+import com.twilio.audioswitch.AudioDevice
 import io.livekit.android.LiveKit
+import io.livekit.android.LiveKitOverrides
+import io.livekit.android.audio.AudioOptions
+import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.events.*
 import io.livekit.android.renderer.SurfaceViewRenderer
 import io.livekit.android.room.Room
@@ -23,6 +27,7 @@ class LiveKitSubscriberManager(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var currentRoom: Room? = null
+    private var audioHandler: AudioSwitchHandler? = null
 
     private val _videoTrack = MutableStateFlow<RemoteVideoTrack?>(null)
     val videoTrack: StateFlow<RemoteVideoTrack?> = _videoTrack.asStateFlow()
@@ -38,8 +43,25 @@ class LiveKitSubscriberManager(private val context: Context) {
 
     private fun routeToSpeakerphone() {
         try {
+            // 1. LiveKit AudioSwitchHandler speakerphone routing
+            audioHandler?.let { handler ->
+                val speakerDevice = handler.availableAudioDevices.find { it is AudioDevice.Speakerphone }
+                if (speakerDevice != null) {
+                    handler.selectDevice(speakerDevice)
+                }
+            }
+
+            // 2. Android AudioManager explicit loudspeaker routing
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+
+            // Ensure in-call volume is raised to an audible level
+            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
+            val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
+            if (currentVol < maxVol / 2) {
+                audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, (maxVol * 0.85).toInt(), 0)
+            }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val speakerDevice = audioManager.availableCommunicationDevices.find {
                     it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
@@ -57,6 +79,7 @@ class LiveKitSubscriberManager(private val context: Context) {
 
     private fun resetAudioRouting() {
         try {
+            audioHandler?.selectDevice(null)
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 audioManager.clearCommunicationDevice()
@@ -73,7 +96,26 @@ class LiveKitSubscriberManager(private val context: Context) {
         disconnect()
 
         return try {
-            val room = LiveKit.create(appContext = context)
+            // Configure AudioSwitchHandler to prioritize loudspeaker output
+            val handler = AudioSwitchHandler(context).apply {
+                preferredDeviceList = listOf(
+                    AudioDevice.Speakerphone::class.java,
+                    AudioDevice.BluetoothHeadset::class.java,
+                    AudioDevice.WiredHeadset::class.java,
+                    AudioDevice.Earpiece::class.java
+                )
+            }
+            audioHandler = handler
+
+            val room = LiveKit.create(
+                appContext = context,
+                overrides = LiveKitOverrides(
+                    audioOptions = AudioOptions(
+                        audioHandler = handler
+                    )
+                )
+            )
+
             room.connect(grant.serverUrl, grant.token)
             currentRoom = room
             _currentMode.value = grant.mode
@@ -142,6 +184,7 @@ class LiveKitSubscriberManager(private val context: Context) {
             currentRoom?.disconnect()
             currentRoom?.release()
             currentRoom = null
+            audioHandler = null
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
