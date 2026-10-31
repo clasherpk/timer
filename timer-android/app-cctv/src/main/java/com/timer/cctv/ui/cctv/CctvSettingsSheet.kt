@@ -376,11 +376,6 @@ fun CctvSettingsSheet(
                     }
                 }
             }
-                    ) {
-                        Text(if (pairingLoading) "Generating..." else "Generate Pairing Code")
-                    }
-                }
-            }
 
             // 6. Battery Optimization Notice
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
