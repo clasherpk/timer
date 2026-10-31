@@ -54,10 +54,7 @@ class MainActivity : ComponentActivity() {
         // Permissions updated
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        // Configure activity to wake screen and display above lockscreen for CCTV remote viewer
+    private fun wakeScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -72,12 +69,18 @@ class MainActivity : ComponentActivity() {
             )
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        wakeScreen()
 
         requestRequiredPermissions()
 
         // Auto-start standby service if enabled previously
         val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
-        if (prefs.getBoolean("standby_enabled", false)) {
+        val initialStandby = prefs.getBoolean("standby_enabled", false)
+        if (initialStandby) {
             val serviceIntent = Intent(this, CctvStandbyService::class.java).apply {
                 action = CctvStandbyService.ACTION_START_STANDBY
             }
@@ -96,11 +99,12 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
                 var showSettingsSheet by remember { mutableStateOf(false) }
 
-                val falseFlow = remember { MutableStateFlow(false) }
+                val initialStandbyFlow = remember { MutableStateFlow(initialStandby) }
                 val idleFlow = remember { MutableStateFlow(SessionMode.IDLE) }
+                val falseFlow = remember { MutableStateFlow(false) }
 
                 val service = standbyService
-                val isStandbyActive by (service?.isStandbyActive ?: falseFlow).collectAsState()
+                val isStandbyActive by (service?.isStandbyActive ?: initialStandbyFlow).collectAsState()
                 val isCameraActive by (service?.publisherManager?.isCameraActive ?: falseFlow).collectAsState()
                 val isMicActive by (service?.publisherManager?.isMicActive ?: falseFlow).collectAsState()
                 val sessionMode by (service?.publisherManager?.sessionMode ?: idleFlow).collectAsState()
@@ -125,13 +129,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        wakeScreen()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-        }
+        wakeScreen()
     }
 
     private fun requestRequiredPermissions() {

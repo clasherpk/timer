@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.wifi.WifiManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -47,6 +48,10 @@ class CctvStandbyService : Service() {
 
     private var heartbeatJob: Job? = null
     private var webSocketJob: Job? = null
+
+    // Standby locks to keep CPU and WiFi awake with screen off
+    private var standbyWakeLock: PowerManager.WakeLock? = null
+    private var standbyWifiLock: WifiManager.WifiLock? = null
 
     private val _isStandbyActive = MutableStateFlow(false)
     val isStandbyActive: StateFlow<Boolean> = _isStandbyActive.asStateFlow()
@@ -99,30 +104,72 @@ class CctvStandbyService : Service() {
         super.onTaskRemoved(rootIntent)
         val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
         if (prefs.getBoolean("standby_enabled", false)) {
-            try {
-                val restartServiceIntent = Intent(applicationContext, CctvStandbyService::class.java).apply {
-                    action = ACTION_START_STANDBY
-                }
-                val restartPending = PendingIntent.getService(
-                    applicationContext,
-                    1001,
-                    restartServiceIntent,
-                    PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-                alarmManager?.set(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + 1000,
-                    restartPending
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
+            scheduleServiceRestart()
+        }
+    }
+
+    private fun scheduleServiceRestart() {
+        try {
+            val restartServiceIntent = Intent(applicationContext, CctvStandbyService::class.java).apply {
+                action = ACTION_START_STANDBY
             }
+            val restartPending = PendingIntent.getService(
+                applicationContext,
+                1001,
+                restartServiceIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            alarmManager?.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + 1000,
+                restartPending
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun acquireStandbyLocks() {
+        try {
+            if (standbyWakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                standbyWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Timer:StandbyWakeLock").apply {
+                    setReferenceCounted(false)
+                }
+            }
+            if (standbyWakeLock?.isHeld == false) {
+                standbyWakeLock?.acquire()
+            }
+
+            if (standbyWifiLock == null) {
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                standbyWifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "Timer:StandbyWifiLock").apply {
+                    setReferenceCounted(false)
+                }
+            }
+            if (standbyWifiLock?.isHeld == false) {
+                standbyWifiLock?.acquire()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun releaseStandbyLocks() {
+        try {
+            standbyWakeLock?.let { if (it.isHeld) it.release() }
+            standbyWakeLock = null
+            standbyWifiLock?.let { if (it.isHeld) it.release() }
+            standbyWifiLock = null
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
     private fun startStandby() {
         _isStandbyActive.value = true
+        acquireStandbyLocks()
         promoteToForeground(isStreaming = false)
         startHeartbeatLoop()
         startWebSocketSignaling()
@@ -133,6 +180,7 @@ class CctvStandbyService : Service() {
         publisherManager.stopSession()
         heartbeatJob?.cancel()
         webSocketJob?.cancel()
+        releaseStandbyLocks()
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {
@@ -181,9 +229,10 @@ class CctvStandbyService : Service() {
 
     private fun wakeUpAndBringAppToForeground() {
         try {
-            // 1. Wake CPU and screen
+            // 1. Wake CPU and turn screen on
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
             if (powerManager != null) {
+                @Suppress("DEPRECATION")
                 val wakeLock = powerManager.newWakeLock(
                     PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
                     "Timer:LiveStreamWake"
@@ -195,7 +244,8 @@ class CctvStandbyService : Service() {
             val launchIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra("EXTRA_FROM_REMOTE_STREAM", true)
             }
 
@@ -219,6 +269,7 @@ class CctvStandbyService : Service() {
                 .setContentText("Camera stream connected.")
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setDefaults(NotificationCompat.DEFAULT_VIBRATE)
                 .setFullScreenIntent(fullScreenPending, true)
                 .setAutoCancel(true)
                 .build()
@@ -259,6 +310,12 @@ class CctvStandbyService : Service() {
         webSocketJob?.cancel()
         webSocketJob = serviceScope.launch {
             val app = TimerApplication.instance
+
+            // Auto-register this device on backend so Admin pairs automatically
+            try {
+                app.apiClient.autoPair(cctvDeviceId = app.deviceId)
+            } catch (ignored: Exception) {}
+
             val wsUrl = app.apiClient.getBaseUrl().replace("http://", "ws://").replace("https://", "wss://") + "/ws"
 
             while (isActive && _isStandbyActive.value) {
@@ -268,18 +325,34 @@ class CctvStandbyService : Service() {
                         val identifyMsg = """{"type":"IDENTIFY","deviceId":"${app.deviceId}"}"""
                         send(Frame.Text(identifyMsg))
 
-                        // 2. Incoming messages listener
-                        for (frame in incoming) {
-                            if (frame is Frame.Text) {
-                                val text = frame.readText()
-                                handleIncomingCommand(text, this)
+                        // 2. Launch background ping loop to keep socket connection hot through deep sleep
+                        val pingJob = launch {
+                            while (isActive) {
+                                delay(15_000L)
+                                try {
+                                    send(Frame.Text("""{"type":"PING"}"""))
+                                } catch (e: Exception) {
+                                    break
+                                }
                             }
+                        }
+
+                        try {
+                            // 3. Incoming messages listener
+                            for (frame in incoming) {
+                                if (frame is Frame.Text) {
+                                    val text = frame.readText()
+                                    handleIncomingCommand(text, this)
+                                }
+                            }
+                        } finally {
+                            pingJob.cancel()
                         }
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
-                delay(5000L) // retry backoff
+                delay(3000L) // retry backoff
             }
         }
     }
@@ -295,14 +368,14 @@ class CctvStandbyService : Service() {
                     if (grantElement != null) {
                         val grant = json.decodeFromJsonElement(LiveKitSessionGrant.serializer(), grantElement)
 
-                        // 1. Wake phone and bring app to foreground so Camera2 permission is valid
+                        // 1. Wake phone and bring app to foreground
                         wakeUpAndBringAppToForeground()
-                        delay(600L)
+                        delay(750L)
 
                         // 2. Elevate foreground service
                         updateForegroundService(isStreaming = true)
 
-                        // 3. Start LiveKit session
+                        // 3. Start LiveKit session with retry
                         val success = publisherManager.startSession(grant)
                         if (!success) {
                             updateForegroundService(isStreaming = false)
@@ -384,7 +457,16 @@ class CctvStandbyService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        stopStandby()
+        val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
+        val shouldKeepRunning = prefs.getBoolean("standby_enabled", false)
+        if (shouldKeepRunning) {
+            scheduleServiceRestart()
+        } else {
+            publisherManager.stopSession()
+            heartbeatJob?.cancel()
+            webSocketJob?.cancel()
+            releaseStandbyLocks()
+        }
         serviceScope.cancel()
     }
 

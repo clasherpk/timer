@@ -8,6 +8,7 @@ import io.livekit.android.LiveKit
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.Track
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,7 +41,7 @@ class LiveKitPublisherManager(private val context: Context) {
 
             when (grant.mode) {
                 SessionMode.CAMERA_ONLY -> {
-                    room.localParticipant.setCameraEnabled(true)
+                    enableCameraWithRetry(room)
                     _isCameraActive.value = true
                     _isMicActive.value = false
                 }
@@ -50,7 +51,7 @@ class LiveKitPublisherManager(private val context: Context) {
                     _isMicActive.value = true
                 }
                 SessionMode.CAMERA_AND_AUDIO -> {
-                    room.localParticipant.setCameraEnabled(true)
+                    enableCameraWithRetry(room)
                     room.localParticipant.setMicrophoneEnabled(true)
                     _isCameraActive.value = true
                     _isMicActive.value = true
@@ -65,6 +66,22 @@ class LiveKitPublisherManager(private val context: Context) {
             stopSession()
             false
         }
+    }
+
+    private suspend fun enableCameraWithRetry(room: Room, maxRetries: Int = 4) {
+        var attempt = 0
+        var lastError: Exception? = null
+        while (attempt < maxRetries) {
+            try {
+                room.localParticipant.setCameraEnabled(true)
+                return
+            } catch (e: Exception) {
+                lastError = e
+                attempt++
+                delay(750L) // Wait for screen/hardware display to finish powering up
+            }
+        }
+        if (lastError != null) throw lastError
     }
 
     suspend fun switchCamera(): CameraFacing {

@@ -90,6 +90,16 @@ fastify.post<{ Body: { adminDeviceId: string; pairingCode: string } }>(
   }
 );
 
+// 4b. Auto-Pair (Single-user mode: auto-link admin with CCTV)
+fastify.post<{ Body: { adminDeviceId?: string; cctvDeviceId?: string } }>(
+  '/api/pairing/auto',
+  async (request, reply) => {
+    const { adminDeviceId, cctvDeviceId } = request.body || {};
+    const result = deviceStore.autoPair(adminDeviceId, cctvDeviceId);
+    return result;
+  }
+);
+
 // 5. Unpair Device
 fastify.post<{ Body: { deviceId: string } }>(
   '/api/pairing/unpair',
@@ -123,12 +133,16 @@ fastify.get<{ Params: { deviceId: string } }>(
   '/api/device/:deviceId/status',
   async (request, reply) => {
     const { deviceId } = request.params;
-    const admin = deviceStore.getDevice(deviceId);
+    let admin = deviceStore.getDevice(deviceId);
     if (!admin || !admin.pairedDeviceId) {
-      return reply.code(404).send({ error: 'Device not found or not paired' });
+      const autoCctv = deviceStore.getAutoPairedCctv(deviceId);
+      if (!autoCctv) {
+        return reply.code(404).send({ error: 'No CCTV phone registered yet. Open Timer app on spare phone.' });
+      }
+      admin = deviceStore.getDevice(deviceId);
     }
 
-    const cctv = deviceStore.getDevice(admin.pairedDeviceId);
+    const cctv = deviceStore.getDevice(admin?.pairedDeviceId || '');
     if (!cctv) {
       return reply.code(404).send({ error: 'Paired CCTV phone not found' });
     }
@@ -157,12 +171,16 @@ fastify.post<{
     return reply.code(400).send({ success: false, error: 'Missing adminDeviceId or invalid mode' });
   }
 
-  const admin = deviceStore.getDevice(adminDeviceId);
+  let admin = deviceStore.getDevice(adminDeviceId);
   if (!admin || !admin.pairedDeviceId) {
-    return reply.code(400).send({ success: false, error: 'Admin is not paired with any CCTV phone' });
+    const autoCctv = deviceStore.getAutoPairedCctv(adminDeviceId);
+    if (!autoCctv) {
+      return reply.code(400).send({ success: false, error: 'No CCTV phone found. Open Timer on spare phone.' });
+    }
+    admin = deviceStore.getDevice(adminDeviceId);
   }
 
-  const cctv = deviceStore.getDevice(admin.pairedDeviceId);
+  const cctv = deviceStore.getDevice(admin?.pairedDeviceId || '');
   if (!cctv) {
     return reply.code(404).send({ success: false, error: 'Paired CCTV device record not found' });
   }

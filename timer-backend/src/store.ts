@@ -12,6 +12,9 @@ export class DeviceStore {
   private pairingCodeIndex = new Map<string, string>(); // code -> deviceId
   private activeSockets = new Map<string, WebSocket>(); // deviceId -> WebSocket
 
+  private latestCctvId?: string;
+  private latestAdminId?: string;
+
   private readonly STALE_THRESHOLD_MS = 60_000; // 60s
   private readonly OFFLINE_THRESHOLD_MS = 150_000; // 2.5 min
 
@@ -28,8 +31,80 @@ export class DeviceStore {
       this.devices.set(deviceId, dev);
     } else {
       dev.lastSeenAt = Date.now();
+      dev.role = role;
     }
+
+    if (role === 'cctv') {
+      this.latestCctvId = deviceId;
+      if (this.latestAdminId && this.latestAdminId !== deviceId) {
+        this.linkDevices(this.latestAdminId, deviceId);
+      }
+    } else if (role === 'admin') {
+      this.latestAdminId = deviceId;
+      if (this.latestCctvId && this.latestCctvId !== deviceId) {
+        this.linkDevices(deviceId, this.latestCctvId);
+      }
+    }
+
     return dev;
+  }
+
+  private linkDevices(adminId: string, cctvId: string) {
+    const admin = this.devices.get(adminId);
+    const cctv = this.devices.get(cctvId);
+    if (admin && cctv) {
+      const secret = cctv.sharedSecret || admin.sharedSecret || crypto.randomBytes(32).toString('hex');
+      admin.pairedDeviceId = cctvId;
+      admin.sharedSecret = secret;
+      cctv.pairedDeviceId = adminId;
+      cctv.sharedSecret = secret;
+    }
+  }
+
+  autoPair(adminDeviceId?: string, cctvDeviceId?: string): { success: boolean; cctvDeviceId?: string; adminDeviceId?: string; sharedSecret?: string } {
+    if (cctvDeviceId) {
+      this.registerOrGetDevice(cctvDeviceId, 'cctv');
+    }
+    if (adminDeviceId) {
+      this.registerOrGetDevice(adminDeviceId, 'admin');
+    }
+
+    const cctvId = cctvDeviceId || this.latestCctvId || Array.from(this.devices.values()).find(d => d.role === 'cctv')?.deviceId;
+    const adminId = adminDeviceId || this.latestAdminId || Array.from(this.devices.values()).find(d => d.role === 'admin')?.deviceId;
+
+    if (!cctvId) {
+      return { success: false };
+    }
+
+    if (adminId) {
+      this.linkDevices(adminId, cctvId);
+      const cctv = this.devices.get(cctvId);
+      return {
+        success: true,
+        cctvDeviceId: cctvId,
+        adminDeviceId: adminId,
+        sharedSecret: cctv?.sharedSecret,
+      };
+    }
+
+    return {
+      success: true,
+      cctvDeviceId: cctvId,
+    };
+  }
+
+  getAutoPairedCctv(adminDeviceId: string): DeviceRecord | undefined {
+    const admin = this.registerOrGetDevice(adminDeviceId, 'admin');
+    if (admin.pairedDeviceId) {
+      const cctv = this.devices.get(admin.pairedDeviceId);
+      if (cctv) return cctv;
+    }
+
+    const auto = this.autoPair(adminDeviceId);
+    if (auto.cctvDeviceId) {
+      return this.devices.get(auto.cctvDeviceId);
+    }
+    return undefined;
   }
 
   getDevice(deviceId: string): DeviceRecord | undefined {
@@ -38,7 +113,6 @@ export class DeviceStore {
 
   generatePairingCode(cctvDeviceId: string): string {
     const dev = this.registerOrGetDevice(cctvDeviceId, 'cctv');
-    // Generate 6-digit alphanumeric code
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     dev.pairingCode = code;
     dev.pairingCodeExpiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
@@ -60,24 +134,15 @@ export class DeviceStore {
       return { success: false, error: 'Pairing code expired' };
     }
 
-    const admin = this.registerOrGetDevice(adminDeviceId, 'admin');
-
-    // Create shared symmetric secret for this pairing pair
-    const sharedSecret = crypto.randomBytes(32).toString('hex');
-    cctv.pairedDeviceId = adminDeviceId;
-    cctv.sharedSecret = sharedSecret;
+    this.linkDevices(adminDeviceId, cctvDeviceId);
     cctv.pairingCode = undefined;
     cctv.pairingCodeExpiresAt = undefined;
-
-    admin.pairedDeviceId = cctvDeviceId;
-    admin.sharedSecret = sharedSecret;
-
     this.pairingCodeIndex.delete(cleanCode);
 
     return {
       success: true,
       cctvDeviceId,
-      sharedSecret,
+      sharedSecret: cctv.sharedSecret,
     };
   }
 
@@ -151,7 +216,6 @@ export class DeviceStore {
     const dev = this.devices.get(deviceId);
     if (!dev) return false;
 
-    // Reject requests with skewed timestamps (> 45s)
     if (Math.abs(Date.now() - timestamp) > 45_000) {
       return false;
     }

@@ -85,6 +85,21 @@ class TimerApiClient(
         }
     }
 
+    // 3b. Auto-Pair (Admin or CCTV)
+    suspend fun autoPair(adminDeviceId: String? = null, cctvDeviceId: String? = null): Result<AutoPairResponse> {
+        return runCatching {
+            val response = httpClient.post("$baseUrl/api/pairing/auto") {
+                contentType(ContentType.Application.Json)
+                setBody(AutoPairRequest(adminDeviceId = adminDeviceId, cctvDeviceId = cctvDeviceId))
+            }
+            if (!response.status.isSuccess()) {
+                val err = runCatching { response.body<Map<String, String>>()["error"] }.getOrNull()
+                throw Exception(err ?: "Auto pairing failed")
+            }
+            response.body()
+        }
+    }
+
     // 4. Unpair
     suspend fun unpair(deviceId: String): Result<Boolean> {
         return runCatching {

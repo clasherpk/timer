@@ -44,7 +44,31 @@ class AdminViewModel : ViewModel() {
     private var pollJob: Job? = null
 
     init {
+        attemptAutoPair()
         startStatusPolling()
+    }
+
+    fun attemptAutoPair() {
+        viewModelScope.launch {
+            try {
+                val res = app.apiClient.autoPair(adminDeviceId = app.deviceId)
+                res.onSuccess { auto ->
+                    val cctvId = auto.cctvDeviceId
+                    val secret = auto.sharedSecret ?: "default-secret"
+                    if (cctvId != null) {
+                        app.savePairing(cctvId, secret)
+                        _uiState.update {
+                            it.copy(
+                                isPaired = true,
+                                pairedCctvId = cctvId,
+                                errorMessage = null
+                            )
+                        }
+                        fetchStatusOnce()
+                    }
+                }
+            } catch (ignored: Exception) {}
+        }
     }
 
     fun updateServerUrl(url: String) {
@@ -158,6 +182,8 @@ class AdminViewModel : ViewModel() {
             while (isActive) {
                 if (_uiState.value.isPaired) {
                     fetchStatusOnce()
+                } else {
+                    attemptAutoPair()
                 }
                 delay(8000L) // poll telemetry every 8s
             }

@@ -156,6 +156,21 @@ data class PairingSubmitResponse(
 )
 
 @Serializable
+data class AutoPairRequest(
+    val adminDeviceId: String? = null,
+    val cctvDeviceId: String? = null
+)
+
+@Serializable
+data class AutoPairResponse(
+    val success: Boolean = false,
+    val cctvDeviceId: String? = null,
+    val adminDeviceId: String? = null,
+    val sharedSecret: String? = null,
+    val error: String? = null
+)
+
+@Serializable
 data class HeartbeatRequest(
     val deviceId: String,
     val health: DeviceHealth

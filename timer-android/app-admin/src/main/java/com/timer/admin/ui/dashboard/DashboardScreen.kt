@@ -98,7 +98,11 @@ fun DashboardScreen(
 
             if (!uiState.isPaired) {
                 // Pairing Card
-                PairingCard(onPair = { code -> viewModel.pairDevice(code) }, isLoading = uiState.isLoading)
+                PairingCard(
+                    onPair = { code -> viewModel.pairDevice(code) },
+                    onAutoPair = { viewModel.attemptAutoPair() },
+                    isLoading = uiState.isLoading
+                )
             } else {
                 // Device Health Dashboard Card
                 HealthDashboardCard(
@@ -163,7 +167,11 @@ fun DashboardScreen(
 }
 
 @Composable
-fun PairingCard(onPair: (String) -> Unit, isLoading: Boolean) {
+fun PairingCard(
+    onPair: (String) -> Unit,
+    onAutoPair: () -> Unit,
+    isLoading: Boolean
+) {
     var code by remember { mutableStateOf("") }
 
     Card(
@@ -179,15 +187,32 @@ fun PairingCard(onPair: (String) -> Unit, isLoading: Boolean) {
                 Text("Pair with Spare Phone", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             Text(
-                "Open 'Timer' on your spare phone, tap CCTV Settings, generate a pairing code, and enter the 6-character code below.",
+                "Auto-pairing links your two personal phones automatically when both apps are installed. You can also manually enter a 6-letter pairing code.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            Button(
+                onClick = onAutoPair,
+                enabled = !isLoading,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(if (isLoading) "Connecting..." else "Auto-Link With Spare Phone")
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider(modifier = Modifier.weight(1f))
+                Text("  OR USE CODE  ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                HorizontalDivider(modifier = Modifier.weight(1f))
+            }
+
             OutlinedTextField(
                 value = code,
                 onValueChange = { if (it.length <= 6) code = it.uppercase() },
-                label = { Text("Enter 6-Letter Pairing Code") },
+                label = { Text("6-Letter Pairing Code") },
                 placeholder = { Text("e.g. 7K9M2P") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -198,12 +223,12 @@ fun PairingCard(onPair: (String) -> Unit, isLoading: Boolean) {
                 )
             )
 
-            Button(
+            OutlinedButton(
                 onClick = { onPair(code.trim()) },
                 enabled = code.length == 6 && !isLoading,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isLoading) "Pairing..." else "Pair Devices")
+                Text("Submit Code")
             }
         }
     }
