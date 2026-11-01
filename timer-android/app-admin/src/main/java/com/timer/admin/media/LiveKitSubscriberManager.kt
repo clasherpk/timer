@@ -5,9 +5,9 @@ import android.media.AudioManager
 import com.timer.admin.AdminApplication
 import com.timer.core.model.*
 import io.livekit.android.AudioOptions
+import io.livekit.android.AudioType
 import io.livekit.android.LiveKit
 import io.livekit.android.LiveKitOverrides
-import io.livekit.android.audio.AudioType
 import io.livekit.android.events.*
 import io.livekit.android.renderer.SurfaceViewRenderer
 import io.livekit.android.room.Room
