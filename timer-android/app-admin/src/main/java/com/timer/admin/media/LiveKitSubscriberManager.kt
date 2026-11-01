@@ -1,16 +1,13 @@
 package com.timer.admin.media
 
 import android.content.Context
-import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.os.Build
 import com.timer.admin.AdminApplication
 import com.timer.core.model.*
-import com.twilio.audioswitch.AudioDevice
+import io.livekit.android.AudioOptions
 import io.livekit.android.LiveKit
 import io.livekit.android.LiveKitOverrides
-import io.livekit.android.audio.AudioOptions
-import io.livekit.android.audio.AudioSwitchHandler
+import io.livekit.android.audio.AudioType
 import io.livekit.android.events.*
 import io.livekit.android.renderer.SurfaceViewRenderer
 import io.livekit.android.room.Room
@@ -27,7 +24,6 @@ class LiveKitSubscriberManager(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var currentRoom: Room? = null
-    private var audioHandler: AudioSwitchHandler? = null
 
     private val _videoTrack = MutableStateFlow<RemoteVideoTrack?>(null)
     val videoTrack: StateFlow<RemoteVideoTrack?> = _videoTrack.asStateFlow()
@@ -41,52 +37,14 @@ class LiveKitSubscriberManager(private val context: Context) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private fun routeToSpeakerphone() {
+    private fun ensureMediaVolume() {
         try {
-            // 1. LiveKit AudioSwitchHandler speakerphone routing
-            audioHandler?.let { handler ->
-                val speakerDevice = handler.availableAudioDevices.find { it is AudioDevice.Speakerphone }
-                if (speakerDevice != null) {
-                    handler.selectDevice(speakerDevice)
-                }
-            }
-
-            // 2. Android AudioManager explicit loudspeaker routing
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-
-            // Ensure in-call volume is raised to an audible level
-            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
-            val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
-            if (currentVol < maxVol / 2) {
-                audioManager.setStreamVolume(AudioManager.STREAM_VOICE_CALL, (maxVol * 0.85).toInt(), 0)
+            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+            if (currentVol < maxVol / 3) {
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (maxVol * 0.8).toInt(), 0)
             }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val speakerDevice = audioManager.availableCommunicationDevices.find {
-                    it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-                }
-                if (speakerDevice != null) {
-                    audioManager.setCommunicationDevice(speakerDevice)
-                }
-            }
-            @Suppress("DEPRECATION")
-            audioManager.isSpeakerphoneOn = true
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun resetAudioRouting() {
-        try {
-            audioHandler?.selectDevice(null)
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                audioManager.clearCommunicationDevice()
-            }
-            @Suppress("DEPRECATION")
-            audioManager.isSpeakerphoneOn = false
-            audioManager.mode = AudioManager.MODE_NORMAL
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -96,22 +54,15 @@ class LiveKitSubscriberManager(private val context: Context) {
         disconnect()
 
         return try {
-            // Configure AudioSwitchHandler to prioritize loudspeaker output
-            val handler = AudioSwitchHandler(context).apply {
-                preferredDeviceList = listOf(
-                    AudioDevice.Speakerphone::class.java,
-                    AudioDevice.BluetoothHeadset::class.java,
-                    AudioDevice.WiredHeadset::class.java,
-                    AudioDevice.Earpiece::class.java
-                )
-            }
-            audioHandler = handler
+            ensureMediaVolume()
 
+            // Configure LiveKit to use MediaAudioType so CCTV audio streams loudly
+            // through the primary loudspeaker as normal media (not phone call earpiece)
             val room = LiveKit.create(
                 appContext = context,
                 overrides = LiveKitOverrides(
                     audioOptions = AudioOptions(
-                        audioHandler = handler
+                        audioOutputType = AudioType.MediaAudioType()
                     )
                 )
             )
@@ -119,7 +70,6 @@ class LiveKitSubscriberManager(private val context: Context) {
             room.connect(grant.serverUrl, grant.token)
             currentRoom = room
             _currentMode.value = grant.mode
-            routeToSpeakerphone()
 
             scope.launch {
                 room.events.collect { event ->
@@ -129,7 +79,7 @@ class LiveKitSubscriberManager(private val context: Context) {
                                 _videoTrack.value = event.track as RemoteVideoTrack
                             } else if (event.track is RemoteAudioTrack) {
                                 _isAudioActive.value = true
-                                routeToSpeakerphone()
+                                ensureMediaVolume()
                             }
                         }
                         is RoomEvent.TrackUnsubscribed -> {
@@ -180,11 +130,9 @@ class LiveKitSubscriberManager(private val context: Context) {
 
     fun disconnect() {
         try {
-            resetAudioRouting()
             currentRoom?.disconnect()
             currentRoom?.release()
             currentRoom = null
-            audioHandler = null
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
