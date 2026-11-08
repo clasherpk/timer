@@ -47,19 +47,14 @@ export class DeviceStore {
 
     if (role === 'cctv') {
       this.latestCctvId = deviceId;
-      this.linkDevices(DEFAULT_ADMIN_ID, deviceId);
-      if (this.latestAdminId && this.latestAdminId !== deviceId) {
-        this.linkDevices(this.latestAdminId, deviceId);
-      }
     } else if (role === 'admin') {
       this.latestAdminId = deviceId;
-      this.linkDevices(deviceId, this.latestCctvId);
     }
 
     return dev;
   }
 
-  private linkDevices(adminId: string, cctvId: string) {
+  linkDevices(adminId: string, cctvId: string) {
     const admin = this.registerOrGetDevice(adminId, 'admin');
     const cctv = this.registerOrGetDevice(cctvId, 'cctv');
     admin.pairedDeviceId = cctvId;
