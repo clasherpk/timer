@@ -1,0 +1,9 @@
+{
+  "name": "timer-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix timer-backend install && npm --prefix timer-backend run build",
+    "start": "npm --prefix timer-backend start"
+  }
+}

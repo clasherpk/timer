@@ -34,7 +34,7 @@ class LiveKitPublisherManager(private val context: Context) {
 
     suspend fun startSession(grant: LiveKitSessionGrant): Boolean {
         // Cleanly stop any existing session and wait for Camera2 HAL to be completely released
-        stopSession()
+        stopSessionSuspend()
         delay(400L)
 
         return try {
@@ -139,7 +139,7 @@ class LiveKitPublisherManager(private val context: Context) {
         return _currentFacing.value
     }
 
-    suspend fun stopSession() {
+    suspend fun stopSessionSuspend() {
         eventsJob?.cancel()
         eventsJob = null
 
@@ -176,9 +176,13 @@ class LiveKitPublisherManager(private val context: Context) {
         _sessionMode.value = SessionMode.IDLE
     }
 
-    fun stopSessionAsync() {
+    fun stopSession() {
         managerScope.launch {
-            stopSession()
+            stopSessionSuspend()
         }
+    }
+
+    fun stopSessionAsync() {
+        stopSession()
     }
 }

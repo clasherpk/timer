@@ -191,7 +191,7 @@ export class DeviceStore {
     for (const [deviceId, socket] of this.activeSockets.entries()) {
       const dev = this.devices.get(deviceId);
       const isCctv = (dev && dev.role === 'cctv') || deviceId.startsWith('cctv') || deviceId === this.latestCctvId;
-      if (isCctv && socket.readyState === socket.OPEN) {
+      if (isCctv && socket.readyState === 1) {
         try {
           socket.send(message);
         } catch (ignored) {}
