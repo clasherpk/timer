@@ -356,15 +356,17 @@ fun ActiveLiveSessionCard(
                     contentAlignment = Alignment.Center
                 ) {
                     if (videoTrack != null) {
-                        AndroidView(
-                            factory = { context ->
-                                SurfaceViewRenderer(context).apply {
-                                    onInitRenderer(this)
-                                    videoTrack.addRenderer(this)
-                                }
-                            },
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        key(videoTrack) {
+                            AndroidView(
+                                factory = { context ->
+                                    SurfaceViewRenderer(context).apply {
+                                        onInitRenderer(this)
+                                        videoTrack.addRenderer(this)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     } else {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = Color.White)

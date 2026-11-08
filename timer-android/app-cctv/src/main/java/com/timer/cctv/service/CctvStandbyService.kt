@@ -89,7 +89,7 @@ class CctvStandbyService : Service() {
                 stopStandby()
             }
             ACTION_STOP_SESSION -> {
-                publisherManager.stopSession()
+                publisherManager.stopSessionAsync()
                 updateForegroundService(isStreaming = false)
                 try {
                     val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -168,16 +168,24 @@ class CctvStandbyService : Service() {
     }
 
     private fun startStandby() {
+        if (_isStandbyActive.value && webSocketJob?.isActive == true && heartbeatJob?.isActive == true) {
+            return
+        }
         _isStandbyActive.value = true
         acquireStandbyLocks()
-        promoteToForeground(isStreaming = false)
-        startHeartbeatLoop()
-        startWebSocketSignaling()
+        val isCurrentlyStreaming = publisherManager.isCameraActive.value || publisherManager.isMicActive.value
+        promoteToForeground(isStreaming = isCurrentlyStreaming)
+        if (heartbeatJob == null || heartbeatJob?.isActive == false) {
+            startHeartbeatLoop()
+        }
+        if (webSocketJob == null || webSocketJob?.isActive == false) {
+            startWebSocketSignaling()
+        }
     }
 
     private fun stopStandby() {
         _isStandbyActive.value = false
-        publisherManager.stopSession()
+        publisherManager.stopSessionAsync()
         heartbeatJob?.cancel()
         webSocketJob?.cancel()
         releaseStandbyLocks()

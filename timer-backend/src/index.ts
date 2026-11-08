@@ -225,15 +225,26 @@ fastify.post<{ Body: { deviceId: string } }>(
   async (request, reply) => {
     const { deviceId } = request.body;
     const dev = deviceStore.getDevice(deviceId);
-    if (!dev) return reply.code(404).send({ error: 'Device not found' });
 
-    const cctvDeviceId = dev.role === 'cctv' ? dev.deviceId : dev.pairedDeviceId;
+    const cctvDeviceId = dev
+      ? dev.role === 'cctv'
+        ? dev.deviceId
+        : dev.pairedDeviceId
+      : 'cctv_primary';
+
+    const stopPayload = JSON.stringify({ type: 'STOP_SESSION', timestamp: Date.now() });
+
     if (cctvDeviceId) {
       const cctvSocket = deviceStore.getSocket(cctvDeviceId);
       if (cctvSocket && cctvSocket.readyState === cctvSocket.OPEN) {
-        cctvSocket.send(JSON.stringify({ type: 'STOP_SESSION', timestamp: Date.now() }));
+        try {
+          cctvSocket.send(stopPayload);
+        } catch (ignored) {}
       }
     }
+
+    // Always broadcast STOP_SESSION to all active CCTV devices
+    deviceStore.broadcastToCctv(stopPayload);
 
     return { success: true };
   }

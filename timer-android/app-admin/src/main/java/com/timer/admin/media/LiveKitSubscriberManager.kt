@@ -24,6 +24,7 @@ class LiveKitSubscriberManager(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var currentRoom: Room? = null
+    private var eventsJob: Job? = null
 
     private val _videoTrack = MutableStateFlow<RemoteVideoTrack?>(null)
     val videoTrack: StateFlow<RemoteVideoTrack?> = _videoTrack.asStateFlow()
@@ -67,11 +68,12 @@ class LiveKitSubscriberManager(private val context: Context) {
                 )
             )
 
-            room.connect(grant.serverUrl, grant.token)
             currentRoom = room
             _currentMode.value = grant.mode
 
-            scope.launch {
+            // Launch collector BEFORE connect so no TrackSubscribed events are missed
+            eventsJob?.cancel()
+            eventsJob = scope.launch {
                 room.events.collect { event ->
                     when (event) {
                         is RoomEvent.TrackSubscribed -> {
@@ -96,6 +98,22 @@ class LiveKitSubscriberManager(private val context: Context) {
                     }
                 }
             }
+
+            room.connect(grant.serverUrl, grant.token)
+
+            // Check if tracks are already available on remote participants
+            for (participant in room.remoteParticipants.values) {
+                val camPub = participant.getTrackPublication(Track.Source.CAMERA)
+                (camPub?.track as? RemoteVideoTrack)?.let {
+                    _videoTrack.value = it
+                }
+                val micPub = participant.getTrackPublication(Track.Source.MICROPHONE)
+                if (micPub?.track is RemoteAudioTrack) {
+                    _isAudioActive.value = true
+                    ensureMediaVolume()
+                }
+            }
+
             true
         } catch (e: Exception) {
             _error.value = e.message ?: "Connection failed"
@@ -129,6 +147,8 @@ class LiveKitSubscriberManager(private val context: Context) {
     }
 
     fun disconnect() {
+        eventsJob?.cancel()
+        eventsJob = null
         try {
             currentRoom?.disconnect()
             currentRoom?.release()

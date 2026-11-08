@@ -77,10 +77,11 @@ class MainActivity : ComponentActivity() {
 
         requestRequiredPermissions()
 
-        // Auto-start standby service if enabled previously
+        // Auto-start standby service if enabled previously (skip if woken up by active remote stream)
+        val isRemoteWake = intent?.getBooleanExtra("EXTRA_FROM_REMOTE_STREAM", false) ?: false
         val prefs = getSharedPreferences("timer_cctv_prefs", Context.MODE_PRIVATE)
         val initialStandby = prefs.getBoolean("standby_enabled", true)
-        if (initialStandby) {
+        if (initialStandby && !isRemoteWake) {
             val serviceIntent = Intent(this, CctvStandbyService::class.java).apply {
                 action = CctvStandbyService.ACTION_START_STANDBY
             }

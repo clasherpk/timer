@@ -26,7 +26,8 @@ export class LiveKitService {
     adminDeviceId: string,
     mode: SessionMode
   ): Promise<{ cctvGrant: LiveKitSessionGrant; adminGrant: LiveKitSessionGrant }> {
-    const roomName = `room_${cctvDeviceId.slice(0, 8)}`;
+    const sessionSuffix = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+    const roomName = `room_${cctvDeviceId.slice(0, 8)}_${sessionSuffix}`;
     const ttlSeconds = 600; // 10 minutes
     const expiresAt = Date.now() + ttlSeconds * 1000;
 

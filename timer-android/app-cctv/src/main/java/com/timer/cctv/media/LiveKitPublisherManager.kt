@@ -5,18 +5,20 @@ import com.timer.core.model.CameraFacing
 import com.timer.core.model.LiveKitSessionGrant
 import com.timer.core.model.SessionMode
 import io.livekit.android.LiveKit
+import io.livekit.android.events.*
 import io.livekit.android.room.Room
 import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.Track
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.runBlocking
 
 class LiveKitPublisherManager(private val context: Context) {
 
+    private val managerScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentRoom: Room? = null
+    private var eventsJob: Job? = null
 
     private val _isCameraActive = MutableStateFlow(false)
     val isCameraActive: StateFlow<Boolean> = _isCameraActive.asStateFlow()
@@ -31,13 +33,36 @@ class LiveKitPublisherManager(private val context: Context) {
     val sessionMode: StateFlow<SessionMode> = _sessionMode.asStateFlow()
 
     suspend fun startSession(grant: LiveKitSessionGrant): Boolean {
+        // Cleanly stop any existing session and wait for Camera2 HAL to be completely released
         stopSession()
+        delay(400L)
 
         return try {
             val room = LiveKit.create(appContext = context)
-            room.connect(grant.serverUrl, grant.token)
             currentRoom = room
             _sessionMode.value = grant.mode
+
+            // Listen for room disconnection or remote subscriber disconnection
+            eventsJob?.cancel()
+            eventsJob = managerScope.launch {
+                room.events.collect { event ->
+                    when (event) {
+                        is RoomEvent.Disconnected -> {
+                            stopSession()
+                        }
+                        is RoomEvent.ParticipantDisconnected -> {
+                            // If the remote subscriber (Admin) leaves, automatically release camera/mic
+                            delay(3000L)
+                            if (room.remoteParticipants.isEmpty() && currentRoom === room) {
+                                stopSession()
+                            }
+                        }
+                        else -> {}
+                    }
+                }
+            }
+
+            room.connect(grant.serverUrl, grant.token)
 
             when (grant.mode) {
                 SessionMode.CAMERA_ONLY -> {
@@ -114,27 +139,46 @@ class LiveKitPublisherManager(private val context: Context) {
         return _currentFacing.value
     }
 
-    fun stopSession() {
-        try {
-            currentRoom?.let { room ->
-                runBlocking {
-                    try {
-                        room.localParticipant.setCameraEnabled(false)
-                        room.localParticipant.setMicrophoneEnabled(false)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-                room.disconnect()
-                room.release()
+    suspend fun stopSession() {
+        eventsJob?.cancel()
+        eventsJob = null
+
+        val room = currentRoom
+        currentRoom = null
+
+        if (room != null) {
+            try {
+                try {
+                    room.localParticipant.setCameraEnabled(false)
+                } catch (ignored: Exception) {}
+
+                try {
+                    room.localParticipant.setMicrophoneEnabled(false)
+                } catch (ignored: Exception) {}
+
+                // Give Camera2 and AudioRecord HAL threads 400ms to close cleanly
+                delay(400L)
+
+                try {
+                    room.disconnect()
+                } catch (ignored: Exception) {}
+
+                try {
+                    room.release()
+                } catch (ignored: Exception) {}
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            currentRoom = null
-        } catch (e: Exception) {
-            e.printStackTrace()
-        } finally {
-            _isCameraActive.value = false
-            _isMicActive.value = false
-            _sessionMode.value = SessionMode.IDLE
+        }
+
+        _isCameraActive.value = false
+        _isMicActive.value = false
+        _sessionMode.value = SessionMode.IDLE
+    }
+
+    fun stopSessionAsync() {
+        managerScope.launch {
+            stopSession()
         }
     }
 }

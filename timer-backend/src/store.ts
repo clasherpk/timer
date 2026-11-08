@@ -180,7 +180,23 @@ export class DeviceStore {
   }
 
   getSocket(deviceId: string): WebSocket | undefined {
-    return this.activeSockets.get(deviceId) || this.activeSockets.get(DEFAULT_CCTV_ID);
+    return (
+      this.activeSockets.get(deviceId) ||
+      (this.latestCctvId ? this.activeSockets.get(this.latestCctvId) : undefined) ||
+      this.activeSockets.get(DEFAULT_CCTV_ID)
+    );
+  }
+
+  broadcastToCctv(message: string) {
+    for (const [deviceId, socket] of this.activeSockets.entries()) {
+      const dev = this.devices.get(deviceId);
+      const isCctv = (dev && dev.role === 'cctv') || deviceId.startsWith('cctv') || deviceId === this.latestCctvId;
+      if (isCctv && socket.readyState === socket.OPEN) {
+        try {
+          socket.send(message);
+        } catch (ignored) {}
+      }
+    }
   }
 
   verifySignature(deviceId: string, payload: string, signature: string, timestamp: number): boolean {
